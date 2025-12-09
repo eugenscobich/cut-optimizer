@@ -12,6 +12,7 @@ class CanvasRenderer {
         this.isDragging = false;
         this.dragStartX = 0;
         this.dragStartY = 0;
+        this.currentSolution = null; // Store current solution for re-renders
 
         this.colors = {
             stock: '#e8f4f8',
@@ -126,6 +127,14 @@ class CanvasRenderer {
     }
 
     render(solution = null) {
+        // Use stored solution if none provided (for pan/zoom operations)
+        if (!solution) {
+            solution = this.currentSolution;
+        } else {
+            // Store the new solution
+            this.currentSolution = solution;
+        }
+
         this.clear();
 
         if (!solution || solution.used_sheets.length === 0) {
