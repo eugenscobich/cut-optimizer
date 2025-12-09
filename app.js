@@ -264,7 +264,8 @@ class CutOptimizationApp {
         if (field === 'length' || field === 'width' || field === 'quantity') {
             this.parts[index][field] = parseFloat(value);
         } else if (field === 'enabled' || field === 'ignore_direction') {
-            this.parts[index][field] = value === 'on' || value === true;
+            // Handle both boolean values (from checkbox) and string values (for compatibility)
+            this.parts[index][field] = value === true || value === 'on' || value === 'true';
         } else {
             this.parts[index][field] = value;
         }
@@ -294,7 +295,9 @@ class CutOptimizationApp {
             input.addEventListener('change', (e) => {
                 const index = parseInt(e.target.dataset.index);
                 const field = e.target.dataset.field;
-                this.updatePart(index, field, e.target.value);
+                // For checkboxes, use checked property; for other inputs, use value
+                const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+                this.updatePart(index, field, value);
             });
         });
     }
@@ -316,7 +319,8 @@ class CutOptimizationApp {
         if (['length', 'width', 'quantity', 'cut_top_size', 'cut_bottom_size', 'cut_left_size', 'cut_right_size'].includes(field)) {
             this.stocks[index][field] = parseFloat(value);
         } else if (field === 'enabled' || field === 'ignore_direction') {
-            this.stocks[index][field] = value === 'on' || value === true;
+            // Handle both boolean values (from checkbox) and string values (for compatibility)
+            this.stocks[index][field] = value === true || value === 'on' || value === 'true';
         } else {
             this.stocks[index][field] = value;
         }
@@ -345,7 +349,9 @@ class CutOptimizationApp {
             input.addEventListener('change', (e) => {
                 const index = parseInt(e.target.dataset.index);
                 const field = e.target.dataset.field;
-                this.updateStock(index, field, e.target.value);
+                // For checkboxes, use checked property; for other inputs, use value
+                const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+                this.updateStock(index, field, value);
             });
         });
     }
@@ -358,6 +364,10 @@ class CutOptimizationApp {
             alert('Please add at least one part and one stock sheet');
             return;
         }
+
+        console.log('Before optimization:');
+        console.log('All parts in app:', this.parts);
+        console.log('All stocks in app:', this.stocks);
 
         this.isOptimizing = true;
         document.getElementById('startOptimizationBtn').disabled = true;
