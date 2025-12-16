@@ -75,6 +75,12 @@ class CutOptimizationApp {
             this.canvas.resetView();
         });
 
+        // Clear Solutions button
+        const clearBtn = document.getElementById('clearSolutionsBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.clearSolutions());
+        }
+
         // Sort controls
         document.querySelectorAll('input[name="sortBy"], input[name="sortOrder"]').forEach(radio => {
             radio.addEventListener('change', () => {
@@ -119,11 +125,13 @@ class CutOptimizationApp {
                 const diff = e.clientX - startX;
                 const newWidth = Math.max(180, startWidth + diff);
                 leftSidebar.style.width = newWidth + 'px';
+                this.canvas.resizeCanvas();
             }
         });
 
         document.addEventListener('mouseup', () => {
             isResizingLeft = false;
+            this.canvas.resizeCanvas();
         });
 
         // Right sidebar resize
@@ -142,11 +150,18 @@ class CutOptimizationApp {
                 const diff = startX - e.clientX;
                 const newWidth = Math.max(180, startWidth + diff);
                 rightSidebar.style.width = newWidth + 'px';
+                // Ensure canvas recalculates size/position after sidebar moves
+                if (this.canvas && typeof this.canvas.resizeCanvas === 'function') {
+                    this.canvas.resizeCanvas();
+                }
             }
         });
 
         document.addEventListener('mouseup', () => {
             isResizingRight = false;
+            if (this.canvas && typeof this.canvas.resizeCanvas === 'function') {
+                this.canvas.resizeCanvas();
+            }
         });
     }
 
@@ -598,6 +613,28 @@ class CutOptimizationApp {
 
         if (this.solutions.length > 0) {
             this.renderSolutions();
+        }
+    }
+
+    clearSolutions() {
+        if (this.isOptimizing) {
+            alert('Cannot clear solutions while optimization is running');
+            return;
+        }
+
+        // Clear in-memory solutions and persisted solutions
+        this.solutions = [];
+        this.currentSolution = null;
+        // Remove stored solutions key
+        if (typeof AppStorage !== 'undefined' && typeof AppStorage.removeData === 'function') {
+            AppStorage.removeData('cutopt_solutions');
+        }
+
+        // Update UI
+        this.renderSolutions();
+        this.updateStatistics();
+        if (this.canvas && typeof this.canvas.render === 'function') {
+            this.canvas.render(null);
         }
     }
 }
