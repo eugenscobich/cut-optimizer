@@ -54,6 +54,19 @@ html, body {
     background-color: #dee2e6;
     user-select: none;
     transition: background-color 0.2s ease;
+    /* make handle overlay the sidebar edge */
+    position: absolute;
+    top: 0;
+    z-index: 50;
+}
+
+/* Place left sidebar handle on the right edge, and right sidebar handle on the left edge */
+.resizable-left .resize-handle {
+    right: 0;
+}
+
+.resizable-right .resize-handle {
+    left: 0;
 }
 
 .resize-handle:hover {
@@ -402,4 +415,3 @@ html, body {
     opacity: 0.6;
     cursor: not-allowed;
 }
-

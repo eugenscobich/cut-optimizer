@@ -115,86 +115,86 @@ class CuttingOptimizer {
         // Try different part orderings to explore more permutations
         // This helps generate diverse solutions with different part arrangements
         for (let partIndex = 0; partIndex < Math.min(remainingParts.length, 3); partIndex++) {
+          if (this.isStopped) {
+            return;
+          }
+
+          // Pick a part from remaining parts (not always the first)
+          const currentPart = remainingParts[partIndex];
+          const restParts = remainingParts.filter((_, i) => i !== partIndex);
+
+          // Try each available stock
+          for (let stockIndex = 0; stockIndex < availableStocks.length; stockIndex++) {
             if (this.isStopped) {
+              return;
+            }
+
+            const stock = availableStocks[stockIndex];
+
+            // Try placement with and without rotation
+            const placements = this.getPossiblePlacements(currentPart, stock);
+
+            for (const placement of placements) {
+              if (this.isStopped) {
                 return;
-            }
+              }
 
-            // Pick a part from remaining parts (not always the first)
-            const currentPart = remainingParts[partIndex];
-            const restParts = remainingParts.filter((_, i) => i !== partIndex);
-
-            // Try each available stock
-            for (let stockIndex = 0; stockIndex < availableStocks.length; stockIndex++) {
+              // Try to place on existing sheets first
+              for (let sheetIdx = 0; sheetIdx < usedSheets.length; sheetIdx++) {
                 if (this.isStopped) {
-                    return;
+                  return;
                 }
 
-                const stock = availableStocks[stockIndex];
+                const sheet = usedSheets[sheetIdx];
+                if (sheet.stock === stock) {
+                  const clonedSheet = this.cloneSheet(sheet);
+                  const newRegions = this.tryPlacePart(clonedSheet, currentPart, placement.x, placement.y, placement.rotated);
 
-                // Try placement with and without rotation
-                const placements = this.getPossiblePlacements(currentPart, stock);
+                  if (newRegions !== null) {
+                    const newUsedSheets = [...usedSheets];
+                    newUsedSheets[sheetIdx] = clonedSheet;
 
-                for (const placement of placements) {
-                if (this.isStopped) {
-                    return;
+                    // Recursively try to place remaining parts
+                    // This explores this branch of the solution tree
+                    await this.placePartsRecursive(
+                        restParts,
+                        availableStocks,
+                        newUsedSheets,
+                        unusedSheets,
+                        placedCount + 1,
+                        totalParts
+                    );
+                    // Continue trying other placements (don't break)
+                  }
                 }
+              }
 
-                // Try to place on existing sheets first
-                for (let sheetIdx = 0; sheetIdx < usedSheets.length; sheetIdx++) {
-                    if (this.isStopped) {
-                        return;
-                    }
+              // Try on new sheet
+              if (availableStocks.length > 0) {
+                const newSheet = new UsedSheet(stock, usedSheets.length);
+                const newRegions = this.tryPlacePart(newSheet, currentPart, placement.x, placement.y, placement.rotated);
 
-                    const sheet = usedSheets[sheetIdx];
-                    if (sheet.stock === stock) {
-                        const clonedSheet = this.cloneSheet(sheet);
-                        const newRegions = this.tryPlacePart(clonedSheet, currentPart, placement.x, placement.y, placement.rotated);
+                if (newRegions !== null) {
+                  const newAvailableStocks = availableStocks.filter((s, i) => i !== stockIndex);
+                  const newUsedSheets = [...usedSheets, newSheet];
+                  const newUnusedSheets = unusedSheets.length > 0 ? unusedSheets : [];
 
-                        if (newRegions !== null) {
-                            const newUsedSheets = [...usedSheets];
-                            newUsedSheets[sheetIdx] = clonedSheet;
-
-                            // Recursively try to place remaining parts
-                            // This explores this branch of the solution tree
-                            await this.placePartsRecursive(
-                                restParts,
-                                availableStocks,
-                                newUsedSheets,
-                                unusedSheets,
-                                placedCount + 1,
-                                totalParts
-                            );
-                            // Continue trying other placements (don't break)
-                        }
-                    }
+                  // Recursively try to place remaining parts
+                  // This explores this branch of the solution tree
+                  await this.placePartsRecursive(
+                      restParts,
+                      newAvailableStocks,
+                      newUsedSheets,
+                      newUnusedSheets,
+                      placedCount + 1,
+                      totalParts
+                  );
+                  // Continue trying other placements (don't break)
                 }
-
-                // Try on new sheet
-                if (availableStocks.length > 0) {
-                    const newSheet = new UsedSheet(stock, usedSheets.length);
-                    const newRegions = this.tryPlacePart(newSheet, currentPart, placement.x, placement.y, placement.rotated);
-
-                    if (newRegions !== null) {
-                        const newAvailableStocks = availableStocks.filter((s, i) => i !== stockIndex);
-                        const newUsedSheets = [...usedSheets, newSheet];
-                        const newUnusedSheets = unusedSheets.length > 0 ? unusedSheets : [];
-
-                        // Recursively try to place remaining parts
-                        // This explores this branch of the solution tree
-                        await this.placePartsRecursive(
-                            restParts,
-                            newAvailableStocks,
-                            newUsedSheets,
-                            newUnusedSheets,
-                            placedCount + 1,
-                            totalParts
-                        );
-                        // Continue trying other placements (don't break)
-                    }
-                }
+              }
             }
+          }
         }
-
         // Try partial solution if no stock available
         // Don't create partial solutions - only valid solutions with ALL parts placed
         // If we reach here with remaining parts, this branch fails (backtrack)
