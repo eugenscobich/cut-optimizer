@@ -156,11 +156,12 @@ class Cut {
 }
 
 class UsedSheet {
-    constructor(stock, index = 0) {
+    constructor(stock, index = 0, originalStockId = null) {
         this.stock = stock;
         this.index = index;
         this.placed_parts = []; // Array of PlacedPart
         this.cuts = []; // Array of Cut
+        this.originalStockId = originalStockId;
     }
 
     get usedArea() {
@@ -195,7 +196,8 @@ class UsedSheet {
                 y: pp.y,
                 rotated: pp.rotated
             })),
-            cuts: this.cuts.map(c => c.toJSON())
+            cuts: this.cuts.map(c => c.toJSON()),
+            originalStockId: this.originalStockId
         };
     }
 }
@@ -251,9 +253,9 @@ class Solution {
         return {
             id: this.id,
             timestamp: this.timestamp.toISOString(),
-            used_sheets: this.used_sheets.map(s => s.toJSON()),
-            unused_sheets: this.unused_sheets.map(s => s.toJSON()),
-            waste_parts: this.waste_parts.map(p => p.toJSON())
+            used_sheets: this.used_sheets.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s),
+            unused_sheets: this.unused_sheets.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s),
+            waste_parts: this.waste_parts.map(p => (p && typeof p.toJSON === 'function') ? p.toJSON() : p)
         };
     }
 
@@ -262,12 +264,14 @@ class Solution {
         solution.timestamp = new Date(obj.timestamp);
         solution.used_sheets = obj.used_sheets.map(sheet => {
             const stock = Stock.fromJSON(sheet.stock);
-            const usedSheet = new UsedSheet(stock, sheet.index);
+            const usedSheet = new UsedSheet(stock, sheet.index, sheet.originalStockId || null);
             usedSheet.placed_parts = sheet.placed_parts.map(pp => {
                 const part = Part.fromJSON(pp.part);
                 return new PlacedPart(part, pp.x, pp.y, pp.rotated);
             });
             usedSheet.cuts = sheet.cuts.map(c => new Cut(c.direction, c.position, c.length, c.offset));
+            // restore originalStockId if present (backwards compatibility)
+            if (sheet.originalStockId) usedSheet.originalStockId = sheet.originalStockId;
             return usedSheet;
         });
         solution.unused_sheets = obj.unused_sheets.map(s => Stock.fromJSON(s));
@@ -332,7 +336,9 @@ class AppStorage {
     }
 
     static saveSolutions(solutions) {
-        this.saveData('cutopt_solutions', solutions.map(s => s.toJSON()));
+        // tolerate solutions that are already plain objects (e.g. from worker postMessage)
+        const payload = solutions.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s);
+        this.saveData('cutopt_solutions', payload);
     }
 
     static loadSolutions() {
@@ -340,4 +346,3 @@ class AppStorage {
         return data ? data.map(s => Solution.fromJSON(s)) : [];
     }
 }
-

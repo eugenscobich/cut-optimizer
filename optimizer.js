@@ -12,6 +12,8 @@ class CuttingOptimizer {
         this.isRunning = false;
         this.isStopped = false;
         this.progressCallback = null;
+        this.totalCombinations = 0;
+        this.processedCombinations = 0;
     }
 
     setProgressCallback(callback) {
@@ -24,13 +26,48 @@ class CuttingOptimizer {
         }
     }
 
+    calculateTotalCombinations(totalParts) {
+        // Calculate theoretical maximum combinations
+        // For each part: orientations (1-2) × stocks × strategies (2)
+        // This is an estimate since actual combinations depend on successful placements
+        let totalStocks = this.stocks.reduce((sum, s) => sum + s.quantity, 0);
+        let totalOrientations = this.parts.reduce((sum, p) => {
+            let orientCount = 1;
+            if (p.enabled && p.ignore_direction && (p.length !== p.width)) {
+                orientCount = 2;
+            }
+            return sum + (orientCount * p.quantity);
+        }, 0);
+
+        // Combination estimation: for each of N parts in sequence,
+        // we try: partIndex × orientations × stocks × strategies
+        // Simplified estimate: average across all parts
+        const avgOrientationsPerPart = totalOrientations / Math.max(1, totalParts);
+        const avgStocks = Math.max(1, totalStocks);
+        const combinationsPerPlacement = avgOrientationsPerPart * avgStocks * 2; // 2 strategies
+
+        // Factorial estimate of part ordering + combinations
+        let estimate = totalParts;
+        for (let i = totalParts - 1; i > 1; i--) {
+            estimate *= i;
+        }
+        estimate *= combinationsPerPlacement;
+
+        return Math.max(1, Math.floor(estimate));
+    }
+
     async optimize() {
         this.isRunning = true;
         this.isStopped = false;
         this.solutions = [];
+        this.processedCombinations = 0;
 
         try {
             const totalParts = this.parts.reduce((sum, p) => sum + p.quantity, 0);
+
+            // Calculate total combinations
+            this.totalCombinations = this.calculateTotalCombinations(totalParts);
+
             this.updateProgress(`Optimizing: 0/${totalParts} parts placed`, 0);
 
             // Expand parts by quantity
@@ -41,10 +78,12 @@ class CuttingOptimizer {
 
             // Create stock instances based on quantity
             const availableStocks = [];
+            // assign unique ids so we can track which remainders come from the same original stock
+            let stockIdCounter = 0;
             this.stocks.forEach(stock => {
                 for (let i = 0; i < stock.quantity; i++) {
-                    // copy stock
-                    availableStocks.push(new Stock(
+                    // copy stock (do NOT mutate original stock object)
+                    const s = new Stock(
                         stock.label,
                         stock.length,
                         stock.width,
@@ -55,7 +94,10 @@ class CuttingOptimizer {
                         stock.cut_bottom_size,
                         stock.cut_left_size,
                         stock.cut_right_size
-                    ));
+                    );
+                    // attach an internal id to track origin without modifying original list
+                    s._id = `stock-${stockIdCounter++}`;
+                    availableStocks.push(s);
                 }
             });
 
@@ -87,7 +129,9 @@ class CuttingOptimizer {
             solution.unused_sheets = unusedSheets.map(s => s);
             solution.waste_parts = [];
             this.solutions.push(solution);
-            this.updateProgress(`Solutions found: ${this.solutions.length}`, Math.min(100, (placedCount / Math.max(1, totalParts)) * 100));
+            this.processedCombinations++;
+            const progressPercentage = Math.min(100, (this.processedCombinations / Math.max(1, this.totalCombinations)) * 100);
+            this.updateProgress(`Optimizing: ${this.solutions.length} solutions found`, progressPercentage);
             return;
         }
 
@@ -120,6 +164,10 @@ class CuttingOptimizer {
                     for (const strat of strategies) {
                         if (this.isStopped) return;
 
+                        this.processedCombinations++;
+                        const progressPercentage = Math.min(100, (this.processedCombinations / Math.max(1, this.totalCombinations)) * 100);
+                        this.updateProgress(`Optimizing: ${this.solutions.length} solutions found`, progressPercentage);
+
                         const attempt = this.cutStockAndPlace(stock, part, orient.rotated, strat);
                         if (!attempt) continue; // cannot place
 
@@ -137,7 +185,28 @@ class CuttingOptimizer {
                         // push remainders at front to prioritize larger pieces
                         newAvailable.unshift(...remainders);
 
-                        const newUsedSheets = usedSheets.concat([usedSheet]);
+                        // Merge usedSheet into existing usedSheets if it's the same originating stock
+                        let newUsedSheets;
+                        if (usedSheets && usedSheets.length) {
+                            const existingIndex = usedSheets.findIndex(s => s.originalStockId && s.originalStockId === usedSheet.originalStockId);
+                            if (existingIndex >= 0) {
+                                // merge placed parts & cuts into the existing sheet record
+                                const existing = usedSheets[existingIndex];
+                                // create a proper UsedSheet instance to preserve methods like toJSON
+                                const merged = new UsedSheet(existing.stock, existing.index);
+                                merged.placed_parts = (existing.placed_parts || []).concat(usedSheet.placed_parts || []);
+                                merged.cuts = (existing.cuts || []).concat(usedSheet.cuts || []);
+                                // preserve originalStockId if present
+                                if (existing.originalStockId) merged.originalStockId = existing.originalStockId;
+                                else if (usedSheet.originalStockId) merged.originalStockId = usedSheet.originalStockId;
+
+                                newUsedSheets = usedSheets.slice(0, existingIndex).concat([merged], usedSheets.slice(existingIndex + 1));
+                            } else {
+                                newUsedSheets = usedSheets.concat([usedSheet]);
+                            }
+                        } else {
+                            newUsedSheets = usedSheets.concat([usedSheet]);
+                        }
 
                         // Recurse
                         await this.placePartsRecursive(rest, newAvailable, newUsedSheets, unusedSheets, placedCount + 1, totalParts);
@@ -146,7 +215,6 @@ class CuttingOptimizer {
             }
 
             // According to requirement, each part starts an execution thread; we don't continue trying other parts in the same level after branching here
-            // So break after the first part branching to avoid permutations of part order that represent same branching structure
             break;
         }
     }
@@ -162,10 +230,25 @@ class CuttingOptimizer {
         if (pLen > stock.length || pWid > stock.width) return null;
 
         // Create used sheet and placed part
-        const usedSheet = new UsedSheet(new Stock(stock.label, stock.length, stock.width, 1, stock.enabled, stock.ignore_direction, stock.cut_top_size, stock.cut_bottom_size, stock.cut_left_size, stock.cut_right_size), 0);
+        const usedSheet = new UsedSheet(
+            new Stock(stock.label,
+                stock.length,
+                stock.width,
+                1,
+                stock.enabled,
+                stock.ignore_direction,
+                stock.cut_top_size,
+                stock.cut_bottom_size,
+                stock.cut_left_size,
+                stock.cut_right_size
+            ),
+            0);
         const placed = new PlacedPart(part, 0, 0, rotated);
         usedSheet.placed_parts = [placed];
         usedSheet.cuts = usedSheet.cuts || [];
+
+        // Mark which original available stock this usedSheet belongs to so subsequent cuts on remainders map back
+        usedSheet.originalStockId = stock._id;
 
         const remainders = [];
         const cuts = [];
@@ -174,27 +257,36 @@ class CuttingOptimizer {
             // vertical cut right after placed part (x = pLen), account for kerf
             const rightLen = stock.length - pLen - kerf;
             if (rightLen > 0) {
-                remainders.push(new Stock(stock.label + '-R', rightLen, stock.width, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0));
+                const r = new Stock(stock.label + '-R', rightLen, stock.width, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
+                // keep origin id so that further cuts of these pieces are attributed to the same used sheet
+                r._id = stock._id;
+                remainders.push(r);
                 cuts.push(new Cut('V', pLen, stock.width, 0));
             }
 
             // horizontal cut below the placed part (y = pWid) but limited to remaining left area (pLen)
             const bottomWid = stock.width - pWid - kerf;
             if (bottomWid > 0) {
-                remainders.push(new Stock(stock.label + '-B', pLen, bottomWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0));
+                const r = new Stock(stock.label + '-B', pLen, bottomWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
+                r._id = stock._id;
+                remainders.push(r);
                 cuts.push(new Cut('H', pWid, pLen, 0));
             }
         } else {
             // width-first: horizontal cut below the placed part first
             const bottomWid = stock.width - pWid - kerf;
             if (bottomWid > 0) {
-                remainders.push(new Stock(stock.label + '-B', stock.length, bottomWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0));
+                const r = new Stock(stock.label + '-B', stock.length, bottomWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
+                r._id = stock._id;
+                remainders.push(r);
                 cuts.push(new Cut('H', pWid, stock.length, 0));
             }
 
             const rightLen = stock.length - pLen - kerf;
             if (rightLen > 0) {
-                remainders.push(new Stock(stock.label + '-R', rightLen, pWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0));
+                const r = new Stock(stock.label + '-R', rightLen, pWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
+                r._id = stock._id;
+                remainders.push(r);
                 cuts.push(new Cut('V', pLen, pWid, 0));
             }
         }
