@@ -137,31 +137,41 @@ class PlacedPart {
     }
 }
 
-class Cut {
-    constructor(direction = 'H', position = 0, length = 0, offset = 0) {
-        this.direction = direction; // 'H' for horizontal, 'V' for vertical
-        this.position = position;
+
+class Area {
+    constructor(x, y, length, width, stock, placed_part = null) {
+        this.x = x;
+        this.y = y;
         this.length = length;
-        this.offset = offset;
+        this.width = width;
+        this.stock = stock;
+        this.placed_part = placed_part;
     }
 
+    get area() {
+        return this.length * this.width;
+    }
     toJSON() {
         return {
-            direction: this.direction,
-            position: this.position,
+            x: this.x,
+            y: this.y,
             length: this.length,
-            offset: this.offset
+            width: this.width,
+            stock: this.stock ? this.stock.toJSON() : null,
+            placed_part: this.placed_part ? this.placed_part.toJSON() : null
         };
     }
 }
 
-class UsedSheet {
-    constructor(stock, index = 0, originalStockId = null) {
-        this.stock = stock;
-        this.index = index;
-        this.placed_parts = []; // Array of PlacedPart
-        this.cuts = []; // Array of Cut
-        this.originalStockId = originalStockId;
+class Cut {
+    constructor(cut_number = 1, area, direction, offset, thickness, placed_part = null, produced_areas) {
+        this.cut_number = cut_number;
+        this.area = area;
+        this.direction = direction;
+        this.offset = offset;
+        this.thickness = thickness;
+        this.placed_part = placed_part;
+        this.produced_areas = produced_areas;
     }
 
     get usedArea() {
@@ -188,55 +198,47 @@ class UsedSheet {
 
     toJSON() {
         return {
-            stock: this.stock.toJSON(),
-            index: this.index,
-            placed_parts: this.placed_parts.map(pp => ({
-                part: pp.part.toJSON(),
-                x: pp.x,
-                y: pp.y,
-                rotated: pp.rotated
-            })),
-            cuts: this.cuts.map(c => c.toJSON()),
-            originalStockId: this.originalStockId
+            cutNumber: this.cutNumber,
+            area: this.area ? this.area.toJSON() : null,
+            direction: this.direction,
+            offset: this.offset,
+            part: this.part ? this.part.toJSON() : null
         };
     }
 }
 
 class Solution {
-    constructor(id = '') {
+    constructor(id = null) {
         this.id = id;
-        this.used_sheets = []; // Array of UsedSheet
-        this.unused_sheets = []; // Array of unused Stock
-        this.waste_parts = []; // Array of Part that couldn't be placed
-        this.timestamp = new Date();
+        this.cuts = []; // Array of cuts
     }
 
     get totalUsedArea() {
-        return this.used_sheets.reduce((sum, sheet) => sum + sheet.usedArea, 0);
+        return 0;
     }
 
     get totalWastedArea() {
-        return this.used_sheets.reduce((sum, sheet) => sum + sheet.wastedArea, 0);
+        return 0;
     }
 
     get totalArea() {
-        return this.used_sheets.reduce((sum, sheet) => sum + sheet.stock.usableArea, 0);
+        return 0;
     }
 
     get totalCuts() {
-        return this.used_sheets.reduce((sum, sheet) => sum + sheet.cuts.length, 0);
+        return 0;
     }
 
     get totalCutLength() {
-        return this.used_sheets.reduce((sum, sheet) => sum + sheet.cutLength, 0);
+        return 0;
     }
 
     get sheetsUsed() {
-        return this.used_sheets.length;
+        return 0;
     }
 
     get partsPlaced() {
-        return this.used_sheets.reduce((sum, sheet) => sum + sheet.placed_parts.length, 0);
+        return 0;
     }
 
     get wastePercentage() {
@@ -252,30 +254,12 @@ class Solution {
     toJSON() {
         return {
             id: this.id,
-            timestamp: this.timestamp.toISOString(),
-            used_sheets: this.used_sheets.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s),
-            unused_sheets: this.unused_sheets.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s),
-            waste_parts: this.waste_parts.map(p => (p && typeof p.toJSON === 'function') ? p.toJSON() : p)
+            cuts: this.cuts.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s)
         };
     }
 
     static fromJSON(obj) {
         const solution = new Solution(obj.id);
-        solution.timestamp = new Date(obj.timestamp);
-        solution.used_sheets = obj.used_sheets.map(sheet => {
-            const stock = Stock.fromJSON(sheet.stock);
-            const usedSheet = new UsedSheet(stock, sheet.index, sheet.originalStockId || null);
-            usedSheet.placed_parts = sheet.placed_parts.map(pp => {
-                const part = Part.fromJSON(pp.part);
-                return new PlacedPart(part, pp.x, pp.y, pp.rotated);
-            });
-            usedSheet.cuts = sheet.cuts.map(c => new Cut(c.direction, c.position, c.length, c.offset));
-            // restore originalStockId if present (backwards compatibility)
-            if (sheet.originalStockId) usedSheet.originalStockId = sheet.originalStockId;
-            return usedSheet;
-        });
-        solution.unused_sheets = obj.unused_sheets.map(s => Stock.fromJSON(s));
-        solution.waste_parts = obj.waste_parts.map(p => Part.fromJSON(p));
         return solution;
     }
 }

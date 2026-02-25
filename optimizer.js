@@ -71,43 +71,35 @@ class CuttingOptimizer {
             this.updateProgress(`Optimizing: 0/${totalParts} parts placed`, 0);
 
             // Expand parts by quantity
-            const remainingParts = [];
+            const partsToPlace = [];
             this.parts.forEach(part => {
-                for (let i = 0; i < part.quantity; i++) remainingParts.push(part);
-            });
-
-            // Create stock instances based on quantity
-            const availableStocks = [];
-            // assign unique ids so we can track which remainders come from the same original stock
-            let stockIdCounter = 0;
-            this.stocks.forEach(stock => {
-                for (let i = 0; i < stock.quantity; i++) {
-                    // copy stock (do NOT mutate original stock object)
-                    const s = new Stock(
-                        stock.label,
-                        stock.length,
-                        stock.width,
-                        1,
-                        stock.enabled,
-                        stock.ignore_direction,
-                        stock.cut_top_size,
-                        stock.cut_bottom_size,
-                        stock.cut_left_size,
-                        stock.cut_right_size
-                    );
-                    // attach an internal id to track origin without modifying original list
-                    s._id = `stock-${stockIdCounter++}`;
-                    availableStocks.push(s);
+                for (let i = 0; i < part.quantity; i++) {
+                    if (part.enabled) {
+                        partsToPlace.push(part);
+                    }
                 }
             });
 
-            await this.placePartsRecursive(remainingParts, availableStocks, [], [], 0, totalParts);
+            // Create stock instances based on quantity
+            const availableAreas = [];
+            this.stocks.forEach(stock => {
+                for (let i = 0; i < stock.quantity; i++) {
+                    if (stock.enabled) {
+                        availableAreas.push(new Area(
+                            0, 0, stock.length, stock.width, stock
+                        ));
+                    }
+                }
+            });
+            availableAreas.sort((a, b) => a.area - b.area);
 
-            // Deduplicate and sort
-            this.solutions = this.deduplicateSolutions(this.solutions);
-            this.solutions.sort((a, b) => a.wastePercentage - b.wastePercentage);
+            console.log(`Parts to place: ${partsToPlace}`);
+            console.log(`Available areas: ${availableAreas}`);
+
+            await this.placePartsRecursive(partsToPlace, availableAreas, []);
 
             this.updateProgress(`Optimization complete: ${this.solutions.length} solutions found`, 100);
+            console.log(this.solutions);
         } finally {
             this.isRunning = false;
         }
@@ -116,35 +108,28 @@ class CuttingOptimizer {
     }
 
     // Recursive placement according to specified branching rules
-    async placePartsRecursive(remainingParts, availableStocks, usedSheets, unusedSheets, placedCount, totalParts) {
+    async placePartsRecursive(remainingParts, availableAreas, cuts) {
         if (this.isStopped) return;
 
         // Yield to UI
         await new Promise(r => setTimeout(r, 0));
 
         // If all parts placed -> record solution
-        if (remainingParts.length === 0) {
-            const solution = new Solution(`Solution-${this.solutions.length + 1}`);
-            solution.used_sheets = usedSheets.map(s => s);
-            solution.unused_sheets = unusedSheets.map(s => s);
-            solution.waste_parts = [];
+        if (remainingParts.length === 0 || availableAreas.length === 0) {
+            const solution = new Solution(this.solutions.length + 1);
+            solution.cuts = cuts;
             this.solutions.push(solution);
-            this.processedCombinations++;
-            const progressPercentage = Math.min(100, (this.processedCombinations / Math.max(1, this.totalCombinations)) * 100);
-            this.updateProgress(`Optimizing: ${this.solutions.length} solutions found`, progressPercentage);
             return;
         }
 
-        // No stocks left -> dead end
-        if (availableStocks.length === 0) return;
-
         // For each part (each execution thread) try placements
-        for (let idx = 0; idx < remainingParts.length; idx++) {
+        for (let partIndex = 0; partIndex < remainingParts.length; partIndex++) {
+            const part = remainingParts[partIndex];
+
             if (this.isStopped) return;
 
-            const part = remainingParts[idx];
             // remaining list without current index
-            const rest = remainingParts.slice(0, idx).concat(remainingParts.slice(idx + 1));
+            const restOfParts = remainingParts.slice(0, partIndex).concat(remainingParts.slice(partIndex + 1));
 
             // orientations
             const orientations = [{ rotated: false, length: part.length, width: part.width }];
@@ -152,64 +137,44 @@ class CuttingOptimizer {
                 orientations.push({ rotated: true, length: part.width, width: part.length });
             }
 
-            for (const orient of orientations) {
+            for (const orientation of orientations) {
                 if (this.isStopped) return;
 
-                for (let sIndex = 0; sIndex < availableStocks.length; sIndex++) {
+                for (let areaIndex = 0; areaIndex < availableAreas.length; areaIndex++) {
                     if (this.isStopped) return;
 
-                    const stock = availableStocks[sIndex];
-
+                    const area = availableAreas[areaIndex];
                     const strategies = ['length-first', 'width-first'];
-                    for (const strat of strategies) {
+                    let partIsPlaced = false;
+                    for (const strategy of strategies) {
                         if (this.isStopped) return;
 
-                        this.processedCombinations++;
-                        const progressPercentage = Math.min(100, (this.processedCombinations / Math.max(1, this.totalCombinations)) * 100);
-                        this.updateProgress(`Optimizing: ${this.solutions.length} solutions found`, progressPercentage);
+                        const newCuts = this.cutAreaAndPlace(area, part, orientation, strategy);
+                        if (!newCuts) continue; // cannot place
+                        partIsPlaced = true;
+                        //replace original area with areas producesd by cuts
+                        const remainingAvailableAreas = availableAreas.slice(0, areaIndex).concat(availableAreas.slice(areaIndex + 1))
 
-                        const attempt = this.cutStockAndPlace(stock, part, orient.rotated, strat);
-                        if (!attempt) continue; // cannot place
 
-                        const { usedSheet, remainders, cuts } = attempt;
+                        // reduce to list of areas produced by cuts that are not fully occupied by the placed part
+                        const newAreas = [];
+                        newCuts.forEach(cut => {
+                            cut.produced_areas.forEach(produced_area => {
+                                if (!produced_area.placed_part) {
+                                    newAreas.push(produced_area);
+                                }
+                            });
+                            cuts.push(cut);
+                        });
 
-                        // attach cuts and placed part to usedSheet (already done in helper)
-                        if (cuts && cuts.length) usedSheet.cuts = (usedSheet.cuts || []).concat(cuts);
+                        remainingAvailableAreas.forEach(remainingAvailableArea => {
+                            newAreas.push(remainingAvailableArea);
+                        })
 
-                        // Build new available stocks (replace chosen stock with remainders)
-                        const newAvailable = [];
-                        for (let i = 0; i < availableStocks.length; i++) {
-                            if (i === sIndex) continue; // skip replaced
-                            newAvailable.push(availableStocks[i]);
-                        }
-                        // push remainders at front to prioritize larger pieces
-                        newAvailable.unshift(...remainders);
-
-                        // Merge usedSheet into existing usedSheets if it's the same originating stock
-                        let newUsedSheets;
-                        if (usedSheets && usedSheets.length) {
-                            const existingIndex = usedSheets.findIndex(s => s.originalStockId && s.originalStockId === usedSheet.originalStockId);
-                            if (existingIndex >= 0) {
-                                // merge placed parts & cuts into the existing sheet record
-                                const existing = usedSheets[existingIndex];
-                                // create a proper UsedSheet instance to preserve methods like toJSON
-                                const merged = new UsedSheet(existing.stock, existing.index);
-                                merged.placed_parts = (existing.placed_parts || []).concat(usedSheet.placed_parts || []);
-                                merged.cuts = (existing.cuts || []).concat(usedSheet.cuts || []);
-                                // preserve originalStockId if present
-                                if (existing.originalStockId) merged.originalStockId = existing.originalStockId;
-                                else if (usedSheet.originalStockId) merged.originalStockId = usedSheet.originalStockId;
-
-                                newUsedSheets = usedSheets.slice(0, existingIndex).concat([merged], usedSheets.slice(existingIndex + 1));
-                            } else {
-                                newUsedSheets = usedSheets.concat([usedSheet]);
-                            }
-                        } else {
-                            newUsedSheets = usedSheets.concat([usedSheet]);
-                        }
-
-                        // Recurse
-                        await this.placePartsRecursive(rest, newAvailable, newUsedSheets, unusedSheets, placedCount + 1, totalParts);
+                        await this.placePartsRecursive(restOfParts, newAreas, cuts);
+                    }
+                    if (partIsPlaced) {
+                        //break;
                     }
                 }
             }
@@ -221,77 +186,118 @@ class CuttingOptimizer {
 
     // Cut a stock at origin (0,0) to place the given part using a guillotine (edge-first) strategy.
     // Returns { usedSheet, remainders, cuts } or null if part doesn't fit.
-    cutStockAndPlace(stock, part, rotated, strategy) {
+    cutAreaAndPlace(area, part, orientation, strategy) {
         const kerf = parseFloat(this.settings.kerf_thickness) || 0;
-        const pLen = rotated ? part.width : part.length;
-        const pWid = rotated ? part.length : part.width;
+        const pLen = orientation.length
+        const pWid = orientation.width
 
-        // Check fit considering stock usable area (ignore pre-cut margins for simplicity)
-        if (pLen > stock.length || pWid > stock.width) return null;
+        // Check fit considering area usable area (ignore pre-cut margins for simplicity)
+        if (pLen > area.length || pWid > area.width) {
+            return null;
+        }
 
-        // Create used sheet and placed part
-        const usedSheet = new UsedSheet(
-            new Stock(stock.label,
-                stock.length,
-                stock.width,
-                1,
-                stock.enabled,
-                stock.ignore_direction,
-                stock.cut_top_size,
-                stock.cut_bottom_size,
-                stock.cut_left_size,
-                stock.cut_right_size
-            ),
-            0);
-        const placed = new PlacedPart(part, 0, 0, rotated);
-        usedSheet.placed_parts = [placed];
-        usedSheet.cuts = usedSheet.cuts || [];
+        if (pLen === area.length || pWid === area.width) {
+            // no cuts
+            return [];
+        }
 
-        // Mark which original available stock this usedSheet belongs to so subsequent cuts on remainders map back
-        usedSheet.originalStockId = stock._id;
+        const placedPart = new PlacedPart(part, area.x, area.y, orientation.rotated);
 
-        const remainders = [];
         const cuts = [];
 
         if (strategy === 'length-first') {
-            // vertical cut right after placed part (x = pLen), account for kerf
-            const rightLen = stock.length - pLen - kerf;
-            if (rightLen > 0) {
-                const r = new Stock(stock.label + '-R', rightLen, stock.width, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
-                // keep origin id so that further cuts of these pieces are attributed to the same used sheet
-                r._id = stock._id;
-                remainders.push(r);
-                cuts.push(new Cut('V', pLen, stock.width, 0));
-            }
-
-            // horizontal cut below the placed part (y = pWid) but limited to remaining left area (pLen)
-            const bottomWid = stock.width - pWid - kerf;
-            if (bottomWid > 0) {
-                const r = new Stock(stock.label + '-B', pLen, bottomWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
-                r._id = stock._id;
-                remainders.push(r);
-                cuts.push(new Cut('H', pWid, pLen, 0));
+            const cut = this.cutHorizontally(area, pWid, kerf, cuts.length + 1);
+            cuts.push(cut);
+            const topArea = cut.produced_areas[0];
+            if (pLen == topArea.length) {
+                topArea.placed_part = placedPart;
+                return cuts;
+            } else {
+                cut.produced_areas.splice(0, 1);
+                const secondCut = this.cutVertically(topArea, pLen, kerf, cuts.length + 1)
+                secondCut.produced_areas[0].placed_part = placedPart;
+                cuts.push(secondCut);
+                return cuts;
             }
         } else {
-            // width-first: horizontal cut below the placed part first
-            const bottomWid = stock.width - pWid - kerf;
-            if (bottomWid > 0) {
-                const r = new Stock(stock.label + '-B', stock.length, bottomWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
-                r._id = stock._id;
-                remainders.push(r);
-                cuts.push(new Cut('H', pWid, stock.length, 0));
-            }
-
-            const rightLen = stock.length - pLen - kerf;
-            if (rightLen > 0) {
-                const r = new Stock(stock.label + '-R', rightLen, pWid, 1, stock.enabled, stock.ignore_direction, 0, 0, 0, 0);
-                r._id = stock._id;
-                remainders.push(r);
-                cuts.push(new Cut('V', pLen, pWid, 0));
+            const cut = this.cutVertically(area, pLen, kerf, cuts.length + 1)
+            cuts.push(cut);
+            const leftArea = cut.produced_areas[0];
+            if (pWid == leftArea.width) {
+                leftArea.placed_part = placedPart;
+                return cuts;
+            } else {
+                cut.produced_areas.splice(0, 1);
+                const secondCut = this.cutHorizontally(leftArea, pWid, kerf, cuts.length + 1);
+                secondCut.produced_areas[0].placed_part = placedPart;
+                cuts.push(secondCut);
+                return cuts;
             }
         }
+        return cuts;
+    }
 
-        return { usedSheet, remainders, cuts };
+
+    cutHorizontally(area, pWid, kerf, cutNumber) {
+        const cut_offset = area.y + pWid;
+        const topArea = new Area(
+            area.x,
+            area.y,
+            area.length,
+            pWid,
+            area.stock
+        )
+
+        const bottomArea = new Area(
+            area.x,
+            area.y + pWid + kerf,
+            area.length,
+            area.width - pWid - kerf,
+            area.stock
+        )
+
+        const producedAreas = [topArea, bottomArea];
+
+        const cut = new Cut(
+            cutNumber,
+            area,
+            'H',
+            cut_offset,
+            kerf,
+            null,
+            producedAreas);
+
+        return cut;
+    }
+
+    cutVertically(area, pLen, kerf, cutNumber) {
+        const cut_offset = area.x + pLen;
+
+        const leftArea = new Area(
+            area.x,
+            area.y,
+            pLen,
+            area.width,
+            area.stock
+        )
+
+        const rightArea = new Area(
+            area.x + pLen + kerf,
+            area.y,
+            area.length - pLen - kerf,
+            area.width,
+            area.stock
+        )
+        const producedAreas = [leftArea, rightArea];
+        const cut = new Cut(
+            cutNumber,
+            area,
+            'V',
+            cut_offset,
+            kerf,
+            null,
+            producedAreas);
+        return cut;
     }
 
     // Remove duplicate solutions by serializing placements and cuts
