@@ -10,6 +10,7 @@ class CutOptimizationApp {
         this.settings = new Settings();
         this.solutions = [];
         this.currentSolution = null;
+        this.selectedCut = null; // Track selected cut
 
         // UI elements
         this.canvas = new CanvasRenderer('drawingCanvas');
@@ -485,6 +486,7 @@ class CutOptimizationApp {
 
     selectSolution(solution) {
         this.currentSolution = solution;
+        this.selectedCut = null; // Clear selected cut when switching solutions
         this.renderSolutions();
         this.updateStatistics();
         this.canvas.render(solution);
@@ -578,16 +580,36 @@ class CutOptimizationApp {
 
         // Cuts List
         let cutsHTML = '';
-        solution.sheets.forEach((sheet, cutIndex) => {
+        solution.sheets.forEach((sheet, sheetIndex) => {
             if (sheet.cuts.length > 0) {
                 cutsHTML += `<div class="sheet-title">${sheet.stock.label}</div>`;
-                sheet.cuts.forEach((cut, index) => {
+                sheet.cuts.forEach((cut, cutIdx) => {
                     const direction = cut.direction === 'H' ? 'Horizontal' : 'Vertical';
-                    cutsHTML += `<div class="cut-item">${direction} @ ${cut.cut_number} (${cut.cutLength.toFixed(1)})</div>`;
+                    const cutId = `${sheetIndex}_${cutIdx}`;
+                    const isSelected = this.selectedCut &&
+                                     this.selectedCut.sheetIndex === sheetIndex &&
+                                     this.selectedCut.cutIndex === cutIdx;
+                    const activeClass = isSelected ? 'active' : '';
+                    cutsHTML += `<div class="cut-item ${activeClass}" data-sheet-index="${sheetIndex}" data-cut-index="${cutIdx}" data-direction="${cut.direction}" data-cut-number="${cut.cut_number}" data-cut-length="${cut.cutLength.toFixed(1)}">${direction} @ ${cut.cut_number} (${cut.cutLength.toFixed(1)})</div>`;
                 });
             }
         });
         document.getElementById('cutsList').innerHTML = cutsHTML || '<p class="text-muted">No cuts</p>';
+
+        // Add click handlers to cut items
+        document.querySelectorAll('.cut-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const sheetIndex = parseInt(e.target.dataset.sheetIndex);
+                const cutIndex = parseInt(e.target.dataset.cutIndex);
+                this.selectCut(sheetIndex, cutIndex);
+            });
+        });
+    }
+
+    selectCut(sheetIndex, cutIndex) {
+        this.selectedCut = { sheetIndex, cutIndex };
+        this.updateStatistics();
+        this.canvas.render(this.currentSolution, this.selectedCut);
     }
 
     // Storage
@@ -625,6 +647,7 @@ class CutOptimizationApp {
         // Clear in-memory solutions and persisted solutions
         this.solutions = [];
         this.currentSolution = null;
+        this.selectedCut = null;
         // Remove stored solutions key
         if (typeof AppStorage !== 'undefined' && typeof AppStorage.removeData === 'function') {
             AppStorage.removeData('cutopt_solutions');

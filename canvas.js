@@ -126,7 +126,7 @@ class CanvasRenderer {
         this.render();
     }
 
-    render(solution = null) {
+    render(solution = null, selectedCut = null) {
         // Use stored solution if none provided (for pan/zoom operations)
         if (!solution) {
             solution = this.currentSolution;
@@ -161,7 +161,7 @@ class CanvasRenderer {
         // Draw sheets
         let currentY = 0;
         solution.sheets.forEach((sheet, index) => {
-            this.drawSheet(sheet, 0, currentY);
+            this.drawSheet(sheet, 0, currentY, selectedCut, index);
             currentY += sheet.stock.width + 20; // Spacing between sheets
         });
 
@@ -204,18 +204,18 @@ class CanvasRenderer {
         }
     }
 
-    drawSheet(sheet, offsetX, offsetY) {
+    drawSheet(sheet, offsetX, offsetY, selectedCut = null, sheetIndex = 0) {
         const { stock, placed_parts, cuts } = sheet;
         const x = offsetX;
         const y = offsetY;
 
         // Draw stock outline
         this.ctx.fillStyle = this.colors.stock;
-        this.ctx.fillRect(x, y, stock.length, stock.width);
+        this.ctx.fillRect(x, y, stock.length - 1, stock.width - 1);
 
         this.ctx.strokeStyle = this.colors.stockBorder;
         this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(x, y, stock.length, stock.width);
+        this.ctx.strokeRect(x, y, stock.length - 1, stock.width - 1);
 
         // Draw cut edges (restricted areas)
         this.ctx.fillStyle = 'rgba(255, 200, 200, 0.2)';
@@ -238,7 +238,7 @@ class CanvasRenderer {
         });
 
         // Draw cuts
-        this.drawCuts(cuts, x, y, stock);
+        this.drawCuts(cuts, x, y, stock, selectedCut, sheetIndex);
 
         // Draw sheet label
         this.ctx.fillStyle = '#333';
@@ -251,11 +251,11 @@ class CanvasRenderer {
 
         // Draw part rectangle
         this.ctx.fillStyle = this.colors.part;
-        this.ctx.fillRect(x, y, length, width);
+        this.ctx.fillRect(x, y, length - 1, width - 1);
 
         this.ctx.strokeStyle = this.colors.partBorder;
         this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(x, y, length, width);
+        this.ctx.strokeRect(x, y, length - 1, width - 1);
 
         // Draw label
         const label = placedPart.part.label || `Part ${index + 1}`;
@@ -272,30 +272,34 @@ class CanvasRenderer {
         this.ctx.fillText(`${length.toFixed(1)}×${width.toFixed(1)}`, x + length / 2, y + width / 2 + 12);
     }
 
-    drawCuts(cuts, offsetX, offsetY, stock) {
-        this.ctx.strokeStyle = this.colors.cut;
-        this.ctx.lineWidth = 1;
-        this.ctx.setLineDash([5, 5]);
+    drawCuts(cuts, offsetX, offsetY, stock, selectedCut = null, sheetIndex = 0) {
+        cuts.forEach((cut, cutIndex) => {
+            const isSelected = selectedCut && selectedCut.sheetIndex === sheetIndex && selectedCut.cutIndex === cutIndex;
 
-        cuts.forEach(cut => {
-            if (cut.direction === 'H') {
-                // Horizontal cut
-                const y = offsetY + cut.position;
-                this.ctx.beginPath();
-                this.ctx.moveTo(offsetX + cut.offset, y);
-                this.ctx.lineTo(offsetX + cut.offset + cut.length, y);
-                this.ctx.stroke();
-            } else if (cut.direction === 'V') {
-                // Vertical cut
-                const x = offsetX + cut.position;
-                this.ctx.beginPath();
-                this.ctx.moveTo(x, offsetY + cut.offset);
-                this.ctx.lineTo(x, offsetY + cut.offset + cut.length);
-                this.ctx.stroke();
+            // Use different color and width for selected cuts
+            if (isSelected) {
+                this.ctx.strokeStyle = this.colors.cut; // Orange/yellow for selected
+                this.ctx.fillStyle = this.colors.cut; // Orange/yellow for selected
+                this.ctx.lineWidth = 1;
+                if (cut.direction === 'H') {
+                    // Horizontal cut
+                    const x = offsetX + cut.area.x;
+                    const y = offsetY + cut.area.y + cut.offset;
+                    const length = cut.area.length;
+                    const width = cut.thickness;
+                    this.ctx.strokeRect(x, y, length - 1, width - 1);
+                    this.ctx.fillRect(x, y, length - 1, width - 1);
+                } else if (cut.direction === 'V') {
+                    // Vertical cut
+                    const x = offsetX + cut.area.x + cut.offset;
+                    const y = offsetY + cut.area.y;
+                    const length = cut.thickness;
+                    const width = cut.area.width;
+                    this.ctx.strokeRect(x, y, length - 1, width - 1);
+                    this.ctx.fillRect(x, y, length - 1, width - 1);
+                }
             }
         });
-
-        this.ctx.setLineDash([]);
     }
 
     // Export canvas as image

@@ -311,10 +311,27 @@ html, body {
 }
 
 .cut-item {
-    padding: 4px 0;
+    padding: 6px 8px;
+    margin: 2px 0;
     border-bottom: 1px solid #eee;
     font-size: 0.8em;
     color: #666;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    background-color: transparent;
+}
+
+.cut-item:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.cut-item.active {
+    background-color: #ffaa00;
+    color: white;
+    border-bottom: 1px solid #ff9500;
+    font-weight: 500;
 }
 
 .cut-item:last-child {

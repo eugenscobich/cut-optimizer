@@ -221,7 +221,6 @@ class CuttingOptimizer {
 
 
     cutHorizontally(area, pWid, kerf, cutNumber) {
-        const cut_offset = area.y + pWid;
         const topArea = new Area(
             area.x,
             area.y,
@@ -244,7 +243,7 @@ class CuttingOptimizer {
             cutNumber,
             area,
             'H',
-            cut_offset,
+            pWid,
             kerf,
             null,
             producedAreas);
@@ -256,8 +255,6 @@ class CuttingOptimizer {
     }
 
     cutVertically(area, pLen, kerf, cutNumber) {
-        const cut_offset = area.x + pLen;
-
         const leftArea = new Area(
             area.x,
             area.y,
@@ -278,7 +275,7 @@ class CuttingOptimizer {
             cutNumber,
             area,
             'V',
-            cut_offset,
+            pLen,
             kerf,
             null,
             producedAreas);

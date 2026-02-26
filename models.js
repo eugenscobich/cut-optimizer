@@ -220,10 +220,10 @@ class Cut {
 }
 
 class Sheet {
-    constructor(stock, areas) {
+    constructor(stock, cuts, areas) {
         this.stock = stock;
         this.areas = areas;
-        this.cuts = this.areas.reduce((cuts, area) => cuts.concat(area.cut ? [area.cut] : []), []);
+        this.cuts = cuts;
         this.placed_parts = this.areas.reduce((parts, area) => parts.concat(area.placed_part ? [area.placed_part] : []), []);
     }
 
@@ -263,7 +263,7 @@ class Solution {
 
         this.sheets = [];
         groupedAreasByStock.forEach((areas, stock) => {
-            this.sheets.push(new Sheet(stock, areas));
+            this.sheets.push(new Sheet(stock, cuts, areas));
         });
 
     }
