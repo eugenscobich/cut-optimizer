@@ -607,7 +607,14 @@ class CutOptimizationApp {
     }
 
     selectCut(sheetIndex, cutIndex) {
-        this.selectedCut = { sheetIndex, cutIndex };
+        // Toggle selection: if clicking the same cut again, deselect it
+        if (this.selectedCut &&
+            this.selectedCut.sheetIndex === sheetIndex &&
+            this.selectedCut.cutIndex === cutIndex) {
+            this.selectedCut.cutIndex = -1;
+        } else {
+            this.selectedCut = { sheetIndex, cutIndex };
+        }
         this.updateStatistics();
         this.canvas.render(this.currentSolution, this.selectedCut);
     }
