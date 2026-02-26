@@ -543,7 +543,7 @@ class CutOptimizationApp {
 
         // Per-Sheet Statistics
         let sheetStatsHTML = '';
-        solution.used_sheets.forEach((sheet, index) => {
+        solution.sheets.forEach((sheet, index) => {
             sheetStatsHTML += `
                 <div class="sheet-stats-group">
                     <div class="sheet-title">${sheet.stock.label} (Sheet ${index + 1})</div>
@@ -578,12 +578,12 @@ class CutOptimizationApp {
 
         // Cuts List
         let cutsHTML = '';
-        solution.used_sheets.forEach((sheet, sheetIndex) => {
+        solution.sheets.forEach((sheet, cutIndex) => {
             if (sheet.cuts.length > 0) {
                 cutsHTML += `<div class="sheet-title">${sheet.stock.label}</div>`;
                 sheet.cuts.forEach((cut, index) => {
                     const direction = cut.direction === 'H' ? 'Horizontal' : 'Vertical';
-                    cutsHTML += `<div class="cut-item">${direction} @ ${cut.position.toFixed(1)} (${cut.length.toFixed(1)})</div>`;
+                    cutsHTML += `<div class="cut-item">${direction} @ ${cut.cut_number} (${cut.cutLength.toFixed(1)})</div>`;
                 });
             }
         });

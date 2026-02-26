@@ -137,7 +137,7 @@ class CanvasRenderer {
 
         this.clear();
 
-        if (!solution || solution.used_sheets.length === 0) {
+        if (!solution || solution.sheets.length === 0) {
             this.drawEmptyState();
             return;
         }
@@ -148,7 +148,7 @@ class CanvasRenderer {
 
         // Calculate bounds
         let minX = 0, minY = 0, maxX = 0, maxY = 0;
-        solution.used_sheets.forEach(sheet => {
+        solution.sheets.forEach(sheet => {
             minX = Math.min(minX, 0);
             minY = Math.min(minY, 0);
             maxX = Math.max(maxX, sheet.stock.length);
@@ -160,7 +160,7 @@ class CanvasRenderer {
 
         // Draw sheets
         let currentY = 0;
-        solution.used_sheets.forEach((sheet, index) => {
+        solution.sheets.forEach((sheet, index) => {
             this.drawSheet(sheet, 0, currentY);
             currentY += sheet.stock.width + 20; // Spacing between sheets
         });
@@ -185,7 +185,7 @@ class CanvasRenderer {
     drawGrid(minX, minY, maxX, maxY) {
         const spacing = 100;
         this.ctx.strokeStyle = this.colors.grid;
-        this.ctx.lineWidth = 0.5;
+        this.ctx.lineWidth = 1;
 
         // Vertical lines
         for (let x = Math.floor(minX / spacing) * spacing; x <= maxX; x += spacing) {
@@ -214,7 +214,7 @@ class CanvasRenderer {
         this.ctx.fillRect(x, y, stock.length, stock.width);
 
         this.ctx.strokeStyle = this.colors.stockBorder;
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 1;
         this.ctx.strokeRect(x, y, stock.length, stock.width);
 
         // Draw cut edges (restricted areas)
@@ -254,7 +254,7 @@ class CanvasRenderer {
         this.ctx.fillRect(x, y, length, width);
 
         this.ctx.strokeStyle = this.colors.partBorder;
-        this.ctx.lineWidth = 1.5;
+        this.ctx.lineWidth = 1;
         this.ctx.strokeRect(x, y, length, width);
 
         // Draw label
@@ -274,7 +274,7 @@ class CanvasRenderer {
 
     drawCuts(cuts, offsetX, offsetY, stock) {
         this.ctx.strokeStyle = this.colors.cut;
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 1;
         this.ctx.setLineDash([5, 5]);
 
         cuts.forEach(cut => {

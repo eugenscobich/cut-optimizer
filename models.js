@@ -135,6 +135,15 @@ class PlacedPart {
     get area() {
         return this.length * this.width;
     }
+
+    toJSON() {
+        return {
+            part: this.part ? this.part.toJSON() : null,
+            x: this.x,
+            y: this.y,
+            rotated: this.rotated
+        };
+    }
 }
 
 
@@ -146,11 +155,14 @@ class Area {
         this.width = width;
         this.stock = stock;
         this.placed_part = placed_part;
+        this.cut = null;
+        this.sub_areas = [];
     }
 
     get area() {
         return this.length * this.width;
     }
+
     toJSON() {
         return {
             x: this.x,
@@ -193,7 +205,7 @@ class Cut {
     }
 
     get cutLength() {
-        return this.cuts.reduce((sum, cut) => sum + cut.length, 0);
+        return this.direction === 'H' ? this.area.length : this.area.width;
     }
 
     toJSON() {
@@ -207,10 +219,53 @@ class Cut {
     }
 }
 
+class Sheet {
+    constructor(stock, areas) {
+        this.stock = stock;
+        this.areas = areas;
+        this.cuts = this.areas.reduce((cuts, area) => cuts.concat(area.cut ? [area.cut] : []), []);
+        this.placed_parts = this.areas.reduce((parts, area) => parts.concat(area.placed_part ? [area.placed_part] : []), []);
+    }
+
+    get usedArea() {
+        return 0.0;
+    }
+
+    get wastedArea() {
+        return 0.0;
+    }
+
+    get utilization() {
+        return 0.0;
+    }
+
+
+    get cutLength() {
+        return this.cuts.reduce((sum, cut) => sum + cut.cut_length, 0);
+    }
+}
+
 class Solution {
-    constructor(id = null) {
+    constructor(id = null, cuts = []) {
         this.id = id;
-        this.cuts = []; // Array of cuts
+        this.cuts = cuts; // Array of cuts
+        this.areas = this.cuts.reduce((areas, cut) => areas.concat(cut.produced_areas), []);
+        this.placed_part = this.areas.reduce((parts, area) => parts.concat(area.placed_part ? [area.placed_part] : []), []);
+
+        const groupedAreasByStock = this.areas.reduce((map, area) => {
+            const key = area.stock;
+            if (!map.has(key)) {
+                map.set(key, []);
+            }
+            map.get(key).push(area);
+            return map;
+        }, new Map());
+
+        this.sheets = [];
+        groupedAreasByStock.forEach((areas, stock) => {
+            this.sheets.push(new Sheet(stock, areas));
+        });
+
     }
 
     get totalUsedArea() {

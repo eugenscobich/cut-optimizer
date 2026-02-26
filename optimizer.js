@@ -96,7 +96,7 @@ class CuttingOptimizer {
             console.log(`Parts to place: ${partsToPlace}`);
             console.log(`Available areas: ${availableAreas}`);
 
-            await this.placePartsRecursive(partsToPlace, availableAreas, []);
+            await this.placeParts(partsToPlace, availableAreas, []);
 
             this.updateProgress(`Optimization complete: ${this.solutions.length} solutions found`, 100);
             console.log(this.solutions);
@@ -107,28 +107,24 @@ class CuttingOptimizer {
         return this.solutions;
     }
 
-    // Recursive placement according to specified branching rules
-    async placePartsRecursive(remainingParts, availableAreas, cuts) {
-        if (this.isStopped) return;
-
-        // Yield to UI
+    async placeParts(remainingParts, availableAreas, cuts) {
         await new Promise(r => setTimeout(r, 0));
+        const strategies = ['length-first', 'width-first'];
 
-        // If all parts placed -> record solution
+
+
         if (remainingParts.length === 0 || availableAreas.length === 0) {
-            const solution = new Solution(this.solutions.length + 1);
-            solution.cuts = cuts;
+            const solution = new Solution(this.solutions.length + 1, cuts);
             this.solutions.push(solution);
             return;
         }
 
-        // For each part (each execution thread) try placements
-        for (let partIndex = 0; partIndex < remainingParts.length; partIndex++) {
-            const part = remainingParts[partIndex];
 
+        for (let partIndex = 0; partIndex < remainingParts.length; partIndex++) {
             if (this.isStopped) return;
 
-            // remaining list without current index
+            const part = remainingParts[partIndex];
+            if (this.isStopped) return;
             const restOfParts = remainingParts.slice(0, partIndex).concat(remainingParts.slice(partIndex + 1));
 
             // orientations
@@ -142,45 +138,39 @@ class CuttingOptimizer {
 
                 for (let areaIndex = 0; areaIndex < availableAreas.length; areaIndex++) {
                     if (this.isStopped) return;
-
                     const area = availableAreas[areaIndex];
-                    const strategies = ['length-first', 'width-first'];
-                    let partIsPlaced = false;
+                    const remainingAvailableAreas = availableAreas.slice(0, areaIndex).concat(availableAreas.slice(areaIndex + 1));
+
                     for (const strategy of strategies) {
                         if (this.isStopped) return;
 
+                        // copy of cats for this branch
+                        const coppyOfCuts = cuts.slice();
+
                         const newCuts = this.cutAreaAndPlace(area, part, orientation, strategy);
                         if (!newCuts) continue; // cannot place
-                        partIsPlaced = true;
-                        //replace original area with areas producesd by cuts
-                        const remainingAvailableAreas = availableAreas.slice(0, areaIndex).concat(availableAreas.slice(areaIndex + 1))
-
 
                         // reduce to list of areas produced by cuts that are not fully occupied by the placed part
                         const newAreas = [];
                         newCuts.forEach(cut => {
                             cut.produced_areas.forEach(produced_area => {
-                                if (!produced_area.placed_part) {
+                                if (!produced_area.placed_part && produced_area.sub_areas.length === 0) {
                                     newAreas.push(produced_area);
                                 }
                             });
-                            cuts.push(cut);
+                            coppyOfCuts.push(cut);
                         });
 
                         remainingAvailableAreas.forEach(remainingAvailableArea => {
                             newAreas.push(remainingAvailableArea);
                         })
 
-                        await this.placePartsRecursive(restOfParts, newAreas, cuts);
-                    }
-                    if (partIsPlaced) {
-                        //break;
+
+                        await this.placeParts(restOfParts, newAreas, coppyOfCuts);
+
                     }
                 }
             }
-
-            // According to requirement, each part starts an execution thread; we don't continue trying other parts in the same level after branching here
-            break;
         }
     }
 
@@ -196,24 +186,17 @@ class CuttingOptimizer {
             return null;
         }
 
-        if (pLen === area.length || pWid === area.width) {
-            // no cuts
-            return [];
-        }
-
         const placedPart = new PlacedPart(part, area.x, area.y, orientation.rotated);
-
         const cuts = [];
 
         if (strategy === 'length-first') {
             const cut = this.cutHorizontally(area, pWid, kerf, cuts.length + 1);
             cuts.push(cut);
             const topArea = cut.produced_areas[0];
-            if (pLen == topArea.length) {
+            if (pLen === topArea.length) {
                 topArea.placed_part = placedPart;
                 return cuts;
             } else {
-                cut.produced_areas.splice(0, 1);
                 const secondCut = this.cutVertically(topArea, pLen, kerf, cuts.length + 1)
                 secondCut.produced_areas[0].placed_part = placedPart;
                 cuts.push(secondCut);
@@ -223,11 +206,10 @@ class CuttingOptimizer {
             const cut = this.cutVertically(area, pLen, kerf, cuts.length + 1)
             cuts.push(cut);
             const leftArea = cut.produced_areas[0];
-            if (pWid == leftArea.width) {
+            if (pWid === leftArea.width) {
                 leftArea.placed_part = placedPart;
                 return cuts;
             } else {
-                cut.produced_areas.splice(0, 1);
                 const secondCut = this.cutHorizontally(leftArea, pWid, kerf, cuts.length + 1);
                 secondCut.produced_areas[0].placed_part = placedPart;
                 cuts.push(secondCut);
@@ -267,6 +249,9 @@ class CuttingOptimizer {
             null,
             producedAreas);
 
+        topArea.cut = cut;
+        bottomArea.cut = cut;
+        area.sub_areas = producedAreas;
         return cut;
     }
 
@@ -297,6 +282,10 @@ class CuttingOptimizer {
             kerf,
             null,
             producedAreas);
+
+        leftArea.cut = cut;
+        rightArea.cut = cut;
+        area.sub_areas = producedAreas;
         return cut;
     }
 
