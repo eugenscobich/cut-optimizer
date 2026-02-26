@@ -286,6 +286,22 @@ class CanvasRenderer {
 
             // Use different color and width for selected cuts
             if (isSelected) {
+                // Draw produced sub-areas (transparent rectangles) so user can see how the area is split
+                if (cut.produced_areas && cut.produced_areas.length > 0) {
+                    // translucent fill for sub-areas
+                    this.ctx.fillStyle = 'rgba(255, 200, 0, 0.12)';
+                    this.ctx.strokeStyle = 'rgba(255, 160, 0, 0.5)';
+                    this.ctx.lineWidth = 1;
+                    cut.produced_areas.forEach(area => {
+                        const ax = offsetX + area.x;
+                        const ay = offsetY + area.y;
+                        const al = area.length;
+                        const aw = area.width;
+                        this.ctx.fillRect(ax, ay, al - 1, aw - 1);
+                        this.ctx.strokeRect(ax, ay, al - 1, aw - 1);
+                    });
+                }
+
                 this.ctx.strokeStyle = this.colors.cut; // Orange/yellow for selected
                 this.ctx.fillStyle = this.colors.cut; // Orange/yellow for selected
                 this.ctx.lineWidth = 1;
