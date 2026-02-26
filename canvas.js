@@ -13,6 +13,7 @@ class CanvasRenderer {
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.currentSolution = null; // Store current solution for re-renders
+        this.currentSelectedCut = null; // Store selected cut for re-renders
 
         this.colors = {
             stock: '#e8f4f8',
@@ -133,6 +134,13 @@ class CanvasRenderer {
         } else {
             // Store the new solution
             this.currentSolution = solution;
+        }
+
+        // Store the selected cut if provided, otherwise use the stored one
+        if (!selectedCut) {
+            selectedCut = this.currentSelectedCut;
+        } else {
+            this.currentSelectedCut = selectedCut;
         }
 
         this.clear();
