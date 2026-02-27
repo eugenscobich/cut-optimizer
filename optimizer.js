@@ -114,7 +114,17 @@ class CuttingOptimizer {
 
 
         if (remainingParts.length === 0 || availableAreas.length === 0) {
-            const solution = new Solution(this.solutions.length + 1, cuts);
+            const areas = [];
+            cuts.forEach(cut => {
+                cut.produced_areas.forEach((area) => {
+                    if (area.placed_part) {
+                        areas.push(area);
+                    } else if (area.sub_areas.length == 0) {
+                        areas.push(area);
+                    }
+                })
+            });
+            const solution = new Solution(this.solutions.length + 1, cuts, areas);
             this.solutions.push(solution);
             return;
         }
@@ -147,7 +157,7 @@ class CuttingOptimizer {
                         // copy of cats for this branch
                         const coppyOfCuts = cuts.slice();
 
-                        const newCuts = this.cutAreaAndPlace(area, part, orientation, strategy);
+                        const newCuts = this.cutAreaAndPlace(area, part, orientation, strategy, coppyOfCuts.length);
                         if (!newCuts) continue; // cannot place
 
                         // reduce to list of areas produced by cuts that are not fully occupied by the placed part
@@ -176,7 +186,7 @@ class CuttingOptimizer {
 
     // Cut a stock at origin (0,0) to place the given part using a guillotine (edge-first) strategy.
     // Returns { usedSheet, remainders, cuts } or null if part doesn't fit.
-    cutAreaAndPlace(area, part, orientation, strategy) {
+    cutAreaAndPlace(area, part, orientation, strategy, numberOfPreviousCuts) {
         const kerf = parseFloat(this.settings.kerf_thickness) || 0;
         const pLen = orientation.length
         const pWid = orientation.width
@@ -186,31 +196,35 @@ class CuttingOptimizer {
             return null;
         }
 
+        if (pLen === area.length || pWid === area.width) {
+            return [];
+        }
+
         const placedPart = new PlacedPart(part, area.x, area.y, orientation.rotated);
         const cuts = [];
 
         if (strategy === 'length-first') {
-            const cut = this.cutHorizontally(area, pWid, kerf, cuts.length + 1);
+            const cut = this.cutHorizontally(area, pWid, kerf, numberOfPreviousCuts + 1);
             cuts.push(cut);
             const topArea = cut.produced_areas[0];
             if (pLen === topArea.length) {
                 topArea.placed_part = placedPart;
                 return cuts;
             } else {
-                const secondCut = this.cutVertically(topArea, pLen, kerf, cuts.length + 1)
+                const secondCut = this.cutVertically(topArea, pLen, kerf, numberOfPreviousCuts + 2)
                 secondCut.produced_areas[0].placed_part = placedPart;
                 cuts.push(secondCut);
                 return cuts;
             }
         } else {
-            const cut = this.cutVertically(area, pLen, kerf, cuts.length + 1)
+            const cut = this.cutVertically(area, pLen, kerf, numberOfPreviousCuts + 1)
             cuts.push(cut);
             const leftArea = cut.produced_areas[0];
             if (pWid === leftArea.width) {
                 leftArea.placed_part = placedPart;
                 return cuts;
             } else {
-                const secondCut = this.cutHorizontally(leftArea, pWid, kerf, cuts.length + 1);
+                const secondCut = this.cutHorizontally(leftArea, pWid, kerf, numberOfPreviousCuts + 2);
                 secondCut.produced_areas[0].placed_part = placedPart;
                 cuts.push(secondCut);
                 return cuts;
@@ -248,8 +262,7 @@ class CuttingOptimizer {
             null,
             producedAreas);
 
-        topArea.cut = cut;
-        bottomArea.cut = cut;
+        area.cut = cut;
         area.sub_areas = producedAreas;
         return cut;
     }
@@ -280,8 +293,7 @@ class CuttingOptimizer {
             null,
             producedAreas);
 
-        leftArea.cut = cut;
-        rightArea.cut = cut;
+        area.cut = cut;
         area.sub_areas = producedAreas;
         return cut;
     }

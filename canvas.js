@@ -240,6 +240,25 @@ class CanvasRenderer {
             this.ctx.fillRect(x, y + stock.width - stock.cut_bottom_size, stock.length, stock.cut_bottom_size);
         }
 
+        // Draw waste areas: areas without placed_part and without sub_areas
+        if (sheet.areas && sheet.areas.length > 0) {
+            this.ctx.fillStyle = 'rgba(255, 204, 204, 0.7)'; // semi-transparent waste fill
+            this.ctx.strokeStyle = 'rgba(180, 120, 120, 0.9)';
+            this.ctx.lineWidth = 1;
+            sheet.areas.forEach(area => {
+                const hasPlaced = !!area.placed_part;
+                const hasSub = area.sub_areas && area.sub_areas.length > 0;
+                if (!hasPlaced && !hasSub) {
+                    const ax = x + area.x;
+                    const ay = y + area.y;
+                    const al = Math.max(0, area.length - 1);
+                    const aw = Math.max(0, area.width - 1);
+                    this.ctx.fillRect(ax, ay, al, aw);
+                    this.ctx.strokeRect(ax, ay, al, aw);
+                }
+            });
+        }
+
         // Draw placed parts
         placed_parts.forEach((part, index) => {
             this.drawPart(part, x + part.x, y + part.y, index);

@@ -246,10 +246,10 @@ class Sheet {
 }
 
 class Solution {
-    constructor(id = null, cuts = []) {
+    constructor(id = null, cuts = [], areas = []) {
         this.id = id;
         this.cuts = cuts; // Array of cuts
-        this.areas = this.cuts.reduce((areas, cut) => areas.concat(cut.produced_areas), []);
+        this.areas = areas;
         this.placed_part = this.areas.reduce((parts, area) => parts.concat(area.placed_part ? [area.placed_part] : []), []);
 
         const groupedAreasByStock = this.areas.reduce((map, area) => {
