@@ -8,9 +8,12 @@ class CutOptimizationApp {
         this.parts = [];
         this.stocks = [];
         this.settings = new Settings();
-        this.solutions = [];
+        this.solutions = []; // Now stores {solution, optimizer} objects
         this.currentSolution = null;
         this.selectedCut = null; // Track selected cut
+
+        // Optimizer selection
+        this.useAdvancedOptimizer = false; // Default to original, will be updated from storage
 
         // UI elements
         this.canvas = new CanvasRenderer('drawingCanvas');
@@ -177,6 +180,30 @@ class CutOptimizationApp {
             this.settings.default_stock_cut_perimeter = parseFloat(e.target.value);
             this.saveToStorage();
         });
+
+        // Optimizer selection toggle
+        const useAdvancedCheckbox = document.getElementById('useAdvancedOptimizer');
+        if (useAdvancedCheckbox) {
+            useAdvancedCheckbox.addEventListener('change', (e) => {
+                this.useAdvancedOptimizer = e.target.checked;
+                localStorage.setItem('useAdvancedOptimizer', this.useAdvancedOptimizer);
+                this.updateOptimizerLabel();
+            });
+            // Load saved preference
+            const saved = localStorage.getItem('useAdvancedOptimizer');
+            if (saved !== null) {
+                this.useAdvancedOptimizer = saved === 'true';
+                useAdvancedCheckbox.checked = this.useAdvancedOptimizer;
+            }
+            this.updateOptimizerLabel();
+        }
+    }
+
+    updateOptimizerLabel() {
+        const label = document.getElementById('optimizerLabel');
+        if (label) {
+            label.textContent = this.useAdvancedOptimizer ? 'Advanced Optimizer' : 'Original Optimizer';
+        }
     }
 
     // CSV Handling
@@ -384,6 +411,7 @@ class CutOptimizationApp {
         console.log('Before optimization:');
         console.log('All parts in app:', this.parts);
         console.log('All stocks in app:', this.stocks);
+        console.log('Using optimizer:', this.useAdvancedOptimizer ? 'Advanced' : 'Original');
 
         this.isOptimizing = true;
         document.getElementById('startOptimizationBtn').disabled = true;
@@ -392,13 +420,27 @@ class CutOptimizationApp {
         this.progressModal.show();
         this.updateProgress('Initializing optimization...', 0);
 
-        this.optimizer = new CuttingOptimizer(this.parts, this.stocks, this.settings);
+        // Select optimizer based on user preference
+        const optimizerType = this.useAdvancedOptimizer ? 'advanced' : 'original';
+        if (this.useAdvancedOptimizer && typeof AdvancedCuttingOptimizer !== 'undefined') {
+            this.optimizer = new AdvancedCuttingOptimizer(this.parts, this.stocks, this.settings);
+        } else {
+            this.optimizer = new CuttingOptimizer(this.parts, this.stocks, this.settings);
+        }
+
         this.optimizer.setProgressCallback((progress) => {
             this.updateProgress(progress.message, progress.percentage);
         });
 
         try {
-            this.solutions = await this.optimizer.optimize();
+            const results = await this.optimizer.optimize();
+            // Append solutions with optimizer type metadata
+            results.forEach(solution => {
+                this.solutions.push({
+                    solution: solution,
+                    optimizer: optimizerType
+                });
+            });
             this.renderSolutions();
             this.saveToStorage();
         } catch (error) {
@@ -447,32 +489,55 @@ class CutOptimizationApp {
         let sorted = [...this.solutions];
 
         if (sortBy === 'waste') {
-            sorted.sort((a, b) => a.wastePercentage - b.wastePercentage);
+            sorted.sort((a, b) => {
+                const aWaste = (a.solution.wastePercentage !== undefined && a.solution.wastePercentage !== null) ? a.solution.wastePercentage : 0;
+                const bWaste = (b.solution.wastePercentage !== undefined && b.solution.wastePercentage !== null) ? b.solution.wastePercentage : 0;
+                return aWaste - bWaste;
+            });
         } else if (sortBy === 'cuts') {
-            sorted.sort((a, b) => a.totalCuts - b.totalCuts);
+            sorted.sort((a, b) => {
+                const aCuts = (a.solution.totalCuts !== undefined && a.solution.totalCuts !== null) ? a.solution.totalCuts : 0;
+                const bCuts = (b.solution.totalCuts !== undefined && b.solution.totalCuts !== null) ? b.solution.totalCuts : 0;
+                return aCuts - bCuts;
+            });
         } else if (sortBy === 'length') {
-            sorted.sort((a, b) => a.totalCutLength - b.totalCutLength);
+            sorted.sort((a, b) => {
+                const aLength = (a.solution.totalCutLength !== undefined && a.solution.totalCutLength !== null) ? a.solution.totalCutLength : 0;
+                const bLength = (b.solution.totalCutLength !== undefined && b.solution.totalCutLength !== null) ? b.solution.totalCutLength : 0;
+                return aLength - bLength;
+            });
         }
 
         if (sortOrder === 'desc') {
             sorted.reverse();
         }
 
+        // ...existing code...
+
         container.innerHTML = '';
-        sorted.forEach((solution, index) => {
+        sorted.forEach((item, index) => {
+            const solution = item.solution;
+            const optimizerType = item.optimizer;
             const div = document.createElement('div');
             div.className = 'solution-item';
             if (this.currentSolution === solution) {
                 div.classList.add('active');
             }
 
+            // Get safe values with defaults
+            const wastePercentage = (solution.wastePercentage !== undefined && solution.wastePercentage !== null) ? solution.wastePercentage : 0;
+            const sheetsUsed = (solution.sheetsUsed !== undefined && solution.sheetsUsed !== null) ? solution.sheetsUsed : 0;
+            const totalCuts = (solution.totalCuts !== undefined && solution.totalCuts !== null) ? solution.totalCuts : 0;
+            const totalCutLength = (solution.totalCutLength !== undefined && solution.totalCutLength !== null) ? solution.totalCutLength : 0;
+
+            const optimizerLabel = optimizerType === 'advanced' ? 'Advanced' : 'Original';
             div.innerHTML = `
-                <div class="solution-item-title">#${index + 1}</div>
+                <div class="solution-item-title">#${index + 1} <span class="optimizer-badge">${optimizerLabel}</span></div>
                 <div class="solution-item-stats">
-                    <div><span class="stat-label">Waste:</span> <span class="stat-value">${solution.wastePercentage.toFixed(1)}%</span></div>
-                    <div><span class="stat-label">Sheets:</span> <span class="stat-value">${solution.sheetsUsed}</span></div>
-                    <div><span class="stat-label">Cuts:</span> <span class="stat-value">${solution.totalCuts}</span></div>
-                    <div><span class="stat-label">Cut Len:</span> <span class="stat-value">${solution.totalCutLength.toFixed(1)}</span></div>
+                    <div><span class="stat-label">Waste:</span> <span class="stat-value">${wastePercentage.toFixed(1)}%</span></div>
+                    <div><span class="stat-label">Sheets:</span> <span class="stat-value">${sheetsUsed}</span></div>
+                    <div><span class="stat-label">Cuts:</span> <span class="stat-value">${totalCuts}</span></div>
+                    <div><span class="stat-label">Cut Len:</span> <span class="stat-value">${totalCutLength.toFixed(1)}</span></div>
                 </div>
             `;
 
@@ -546,32 +611,46 @@ class CutOptimizationApp {
         // Per-Sheet Statistics
         let sheetStatsHTML = '';
         solution.sheets.forEach((sheet, index) => {
+            // Handle both optimizer formats
+            const stockLabel = sheet.stock ? (sheet.stock.label || `Sheet ${index + 1}`) : `Sheet ${index + 1}`;
+            const usedArea = sheet.usedArea || 0;
+            const wastedArea = sheet.wastedArea || 0;
+            const totalArea = sheet.totalArea || 0;
+            const utilization = sheet.utilization || 0;
+
+            // Handle parts count - different property names in different optimizers
+            const partsCount = (sheet.placed_parts && sheet.placed_parts.length) || (sheet.placed && sheet.placed.length) || 0;
+
+            // Handle cuts - may not exist
+            const cutsCount = (sheet.cuts && sheet.cuts.length) || 0;
+            const cutLength = sheet.cutLength || 0;
+
             sheetStatsHTML += `
                 <div class="sheet-stats-group">
-                    <div class="sheet-title">${sheet.stock.label} (Sheet ${index + 1})</div>
+                    <div class="sheet-title">${stockLabel} (Sheet ${index + 1})</div>
                     <div class="stat-row">
                         <span class="stat-label">Used Area:</span>
-                        <span class="stat-value">${sheet.usedArea.toFixed(2)}</span>
+                        <span class="stat-value">${usedArea.toFixed(2)}</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">Wasted Area:</span>
-                        <span class="stat-value">${sheet.wastedArea.toFixed(2)}</span>
+                        <span class="stat-value">${wastedArea.toFixed(2)}</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">Utilization:</span>
-                        <span class="stat-value">${sheet.utilization.toFixed(1)}%</span>
+                        <span class="stat-value">${utilization.toFixed(1)}%</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">Parts Count:</span>
-                        <span class="stat-value">${sheet.placed_parts.length}</span>
+                        <span class="stat-value">${partsCount}</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">Cuts:</span>
-                        <span class="stat-value">${sheet.cuts.length}</span>
+                        <span class="stat-value">${cutsCount}</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">Cut Length:</span>
-                        <span class="stat-value">${sheet.cutLength.toFixed(2)}</span>
+                        <span class="stat-value">${cutLength.toFixed(2)}</span>
                     </div>
                 </div>
             `;
@@ -581,8 +660,9 @@ class CutOptimizationApp {
         // Cuts List
         let cutsHTML = '';
         solution.sheets.forEach((sheet, sheetIndex) => {
-            if (sheet.cuts.length > 0) {
-                cutsHTML += `<div class="sheet-title">${sheet.stock.label}</div>`;
+            if (sheet.cuts && Array.isArray(sheet.cuts) && sheet.cuts.length > 0) {
+                const stockLabel = sheet.stock ? (sheet.stock.label || `Sheet ${sheetIndex + 1}`) : `Sheet ${sheetIndex + 1}`;
+                cutsHTML += `<div class="sheet-title">${stockLabel}</div>`;
                 sheet.cuts.forEach((cut, cutIdx) => {
                     const direction = cut.direction === 'H' ? 'Horizontal' : 'Vertical';
                     const cutId = `${sheetIndex}_${cutIdx}`;
@@ -590,7 +670,8 @@ class CutOptimizationApp {
                                      this.selectedCut.sheetIndex === sheetIndex &&
                                      this.selectedCut.cutIndex === cutIdx;
                     const activeClass = isSelected ? 'active' : '';
-                    cutsHTML += `<div class="cut-item ${activeClass}" data-sheet-index="${sheetIndex}" data-cut-index="${cutIdx}" data-direction="${cut.direction}" data-cut-number="${cut.cut_number}" data-cut-length="${cut.cutLength.toFixed(1)}">${direction} @ ${cut.cut_number} (${cut.cutLength.toFixed(1)})</div>`;
+                    const cutLength = (cut.cutLength !== undefined && cut.cutLength !== null) ? cut.cutLength.toFixed(1) : '0.0';
+                    cutsHTML += `<div class="cut-item ${activeClass}" data-sheet-index="${sheetIndex}" data-cut-index="${cutIdx}" data-direction="${cut.direction}" data-cut-number="${cut.cut_number}" data-cut-length="${cutLength}">${direction} @ ${cut.cut_number} (${cutLength})</div>`;
                 });
             }
         });

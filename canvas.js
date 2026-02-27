@@ -213,7 +213,10 @@ class CanvasRenderer {
     }
 
     drawSheet(sheet, offsetX, offsetY, selectedCut = null, sheetIndex = 0) {
-        const { stock, placed_parts, cuts } = sheet;
+        const { stock } = sheet;
+        // Handle both optimizer formats - advanced uses 'placed', original uses 'placed_parts'
+        const placed_parts = sheet.placed_parts || sheet.placed || [];
+        const cuts = sheet.cuts || [];
         const x = offsetX;
         const y = offsetY;
 

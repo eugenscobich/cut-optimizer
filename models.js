@@ -269,31 +269,31 @@ class Solution {
     }
 
     get totalUsedArea() {
-        return 0;
+        return this.sheets.reduce((sum, sheet) => sum + (sheet.usedArea || 0), 0);
     }
 
     get totalWastedArea() {
-        return 0;
+        return this.sheets.reduce((sum, sheet) => sum + (sheet.wastedArea || 0), 0);
     }
 
     get totalArea() {
-        return 0;
+        return this.sheets.reduce((sum, sheet) => sum + (sheet.totalArea || 0), 0);
     }
 
     get totalCuts() {
-        return 0;
+        return this.cuts.length || 0;
     }
 
     get totalCutLength() {
-        return 0;
+        return this.cuts.reduce((sum, cut) => sum + (cut.cutLength || 0), 0);
     }
 
     get sheetsUsed() {
-        return 0;
+        return this.sheets.length;
     }
 
     get partsPlaced() {
-        return 0;
+        return this.placed_part.length;
     }
 
     get wastePercentage() {
@@ -375,13 +375,41 @@ class AppStorage {
     }
 
     static saveSolutions(solutions) {
-        // tolerate solutions that are already plain objects (e.g. from worker postMessage)
-        const payload = solutions.map(s => (s && typeof s.toJSON === 'function') ? s.toJSON() : s);
+        // Handle both old format (plain solutions) and new format ({solution, optimizer})
+        const payload = solutions.map(item => {
+            // If it's already in the new format
+            if (item && item.solution) {
+                return {
+                    solution: (item.solution && typeof item.solution.toJSON === 'function') ? item.solution.toJSON() : item.solution,
+                    optimizer: item.optimizer || 'original'
+                };
+            }
+            // Legacy format - assume original optimizer
+            return {
+                solution: (item && typeof item.toJSON === 'function') ? item.toJSON() : item,
+                optimizer: 'original'
+            };
+        });
         this.saveData('cutopt_solutions', payload);
     }
 
     static loadSolutions() {
         const data = this.loadData('cutopt_solutions');
-        return data ? data.map(s => Solution.fromJSON(s)) : [];
+        if (!data) return [];
+
+        return data.map(item => {
+            // Handle both formats
+            if (item.solution) {
+                return {
+                    solution: Solution.fromJSON(item.solution),
+                    optimizer: item.optimizer || 'original'
+                };
+            }
+            // Legacy format
+            return {
+                solution: Solution.fromJSON(item),
+                optimizer: 'original'
+            };
+        });
     }
 }
