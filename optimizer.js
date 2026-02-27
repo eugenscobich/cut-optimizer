@@ -22,7 +22,7 @@ class CuttingOptimizer {
 
     updateProgress(message, percentage) {
         if (this.progressCallback) {
-            this.progressCallback({ message, percentage });
+            this.progressCallback({message, percentage});
         }
     }
 
@@ -112,7 +112,6 @@ class CuttingOptimizer {
         const strategies = ['length-first', 'width-first'];
 
 
-
         if (remainingParts.length === 0 || availableAreas.length === 0) {
             const areas = [];
             cuts.forEach(cut => {
@@ -138,9 +137,9 @@ class CuttingOptimizer {
             const restOfParts = remainingParts.slice(0, partIndex).concat(remainingParts.slice(partIndex + 1));
 
             // orientations
-            const orientations = [{ rotated: false, length: part.length, width: part.width }];
+            const orientations = [{rotated: false, length: part.length, width: part.width}];
             if (part.ignore_direction && (part.length !== part.width)) {
-                orientations.push({ rotated: true, length: part.width, width: part.length });
+                orientations.push({rotated: true, length: part.width, width: part.length});
             }
 
             for (const orientation of orientations) {
@@ -155,9 +154,9 @@ class CuttingOptimizer {
                         if (this.isStopped) return;
 
                         // copy of cats for this branch
-                        const coppyOfCuts = cuts.slice();
+                        const copyOfCuts = cuts.slice();
 
-                        const newCuts = this.cutAreaAndPlace(area, part, orientation, strategy, coppyOfCuts.length);
+                        const newCuts = this.cutAreaAndPlace(area, part, orientation, strategy, copyOfCuts.length);
                         if (!newCuts) continue; // cannot place
 
                         // reduce to list of areas produced by cuts that are not fully occupied by the placed part
@@ -168,7 +167,7 @@ class CuttingOptimizer {
                                     newAreas.push(produced_area);
                                 }
                             });
-                            coppyOfCuts.push(cut);
+                            copyOfCuts.push(cut);
                         });
 
                         remainingAvailableAreas.forEach(remainingAvailableArea => {
@@ -176,7 +175,7 @@ class CuttingOptimizer {
                         })
 
 
-                        await this.placeParts(restOfParts, newAreas, coppyOfCuts);
+                        await this.placeParts(restOfParts, newAreas, copyOfCuts);
 
                     }
                 }
@@ -196,38 +195,54 @@ class CuttingOptimizer {
             return null;
         }
 
-        if (pLen === area.length || pWid === area.width) {
+        const placedPart = new PlacedPart(part, area.x, area.y, orientation.rotated);
+
+        if (pLen === area.length && pWid === area.width) {
+            area.placed_part = placedPart;
             return [];
         }
 
-        const placedPart = new PlacedPart(part, area.x, area.y, orientation.rotated);
         const cuts = [];
 
         if (strategy === 'length-first') {
-            const cut = this.cutHorizontally(area, pWid, kerf, numberOfPreviousCuts + 1);
-            cuts.push(cut);
-            const topArea = cut.produced_areas[0];
-            if (pLen === topArea.length) {
-                topArea.placed_part = placedPart;
-                return cuts;
-            } else {
-                const secondCut = this.cutVertically(topArea, pLen, kerf, numberOfPreviousCuts + 2)
+            if (pWid === area.width) {
+                const secondCut = this.cutVertically(area, pLen, kerf, numberOfPreviousCuts + 1)
                 secondCut.produced_areas[0].placed_part = placedPart;
                 cuts.push(secondCut);
                 return cuts;
+            } else {
+                const cut = this.cutHorizontally(area, pWid, kerf, numberOfPreviousCuts + 1);
+                cuts.push(cut);
+                const topArea = cut.produced_areas[0];
+                if (pLen === topArea.length) {
+                    topArea.placed_part = placedPart;
+                    return cuts;
+                } else {
+                    const secondCut = this.cutVertically(topArea, pLen, kerf, numberOfPreviousCuts + 2)
+                    secondCut.produced_areas[0].placed_part = placedPart;
+                    cuts.push(secondCut);
+                    return cuts;
+                }
             }
         } else {
-            const cut = this.cutVertically(area, pLen, kerf, numberOfPreviousCuts + 1)
-            cuts.push(cut);
-            const leftArea = cut.produced_areas[0];
-            if (pWid === leftArea.width) {
-                leftArea.placed_part = placedPart;
-                return cuts;
-            } else {
-                const secondCut = this.cutHorizontally(leftArea, pWid, kerf, numberOfPreviousCuts + 2);
+            if (pLen === area.length) {
+                const secondCut = this.cutHorizontally(area, pWid, kerf, numberOfPreviousCuts + 1);
                 secondCut.produced_areas[0].placed_part = placedPart;
                 cuts.push(secondCut);
                 return cuts;
+            } else {
+                const cut = this.cutVertically(area, pLen, kerf, numberOfPreviousCuts + 1)
+                cuts.push(cut);
+                const leftArea = cut.produced_areas[0];
+                if (pWid === leftArea.width) {
+                    leftArea.placed_part = placedPart;
+                    return cuts;
+                } else {
+                    const secondCut = this.cutHorizontally(leftArea, pWid, kerf, numberOfPreviousCuts + 2);
+                    secondCut.produced_areas[0].placed_part = placedPart;
+                    cuts.push(secondCut);
+                    return cuts;
+                }
             }
         }
         return cuts;
@@ -307,8 +322,8 @@ class CuttingOptimizer {
             // Serialize by used_sheets: for each sheet list placed parts (label,x,y,rotated) and cuts
             const keyObj = sol.used_sheets.map(sheet => ({
                 stock: sheet.stock.label,
-                placed: sheet.placed_parts.map(pp => ({ label: pp.part.label, x: pp.x, y: pp.y, rotated: pp.rotated })),
-                cuts: sheet.cuts.map(c => ({ d: c.direction, p: c.position, l: c.length, o: c.offset }))
+                placed: sheet.placed_parts.map(pp => ({label: pp.part.label, x: pp.x, y: pp.y, rotated: pp.rotated})),
+                cuts: sheet.cuts.map(c => ({d: c.direction, p: c.position, l: c.length, o: c.offset}))
             }));
 
             const key = JSON.stringify(keyObj);
