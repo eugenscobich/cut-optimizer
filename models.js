@@ -399,7 +399,14 @@ class AppStorage {
 
         return data.map(item => {
             // Handle both formats
-            if (item.solution) {
+            if (item && item.solution) {
+                // For advanced optimizer solutions, use SolutionAdvanced.fromJSON
+                if (item.optimizer === 'advanced' && typeof SolutionAdvanced !== 'undefined') {
+                    return {
+                        solution: SolutionAdvanced.fromJSON(item.solution),
+                        optimizer: 'advanced'
+                    };
+                }
                 return {
                     solution: Solution.fromJSON(item.solution),
                     optimizer: item.optimizer || 'original'

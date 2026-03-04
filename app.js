@@ -12,9 +12,6 @@ class CutOptimizationApp {
         this.currentSolution = null;
         this.selectedCut = null; // Track selected cut
 
-        // Optimizer selection
-        this.useAdvancedOptimizer = false; // Default to original, will be updated from storage
-
         // UI elements
         this.canvas = new CanvasRenderer('drawingCanvas');
         this.optimizer = null;
@@ -181,20 +178,11 @@ class CutOptimizationApp {
             this.saveToStorage();
         });
 
-        // Optimizer selection toggle
+        // Advanced Optimizer is now the only optimizer
         const useAdvancedCheckbox = document.getElementById('useAdvancedOptimizer');
         if (useAdvancedCheckbox) {
-            useAdvancedCheckbox.addEventListener('change', (e) => {
-                this.useAdvancedOptimizer = e.target.checked;
-                localStorage.setItem('useAdvancedOptimizer', this.useAdvancedOptimizer);
-                this.updateOptimizerLabel();
-            });
-            // Load saved preference
-            const saved = localStorage.getItem('useAdvancedOptimizer');
-            if (saved !== null) {
-                this.useAdvancedOptimizer = saved === 'true';
-                useAdvancedCheckbox.checked = this.useAdvancedOptimizer;
-            }
+            useAdvancedCheckbox.disabled = true;
+            useAdvancedCheckbox.checked = true;
             this.updateOptimizerLabel();
         }
     }
@@ -411,7 +399,7 @@ class CutOptimizationApp {
         console.log('Before optimization:');
         console.log('All parts in app:', this.parts);
         console.log('All stocks in app:', this.stocks);
-        console.log('Using optimizer:', this.useAdvancedOptimizer ? 'Advanced' : 'Original');
+        console.log('Using Advanced Optimizer');
 
         this.isOptimizing = true;
         document.getElementById('startOptimizationBtn').disabled = true;
@@ -420,27 +408,16 @@ class CutOptimizationApp {
         this.progressModal.show();
         this.updateProgress('Initializing optimization...', 0);
 
-        // Select optimizer based on user preference
-        const optimizerType = this.useAdvancedOptimizer ? 'advanced' : 'original';
-        if (this.useAdvancedOptimizer && typeof AdvancedCuttingOptimizer !== 'undefined') {
-            this.optimizer = new AdvancedCuttingOptimizer(this.parts, this.stocks, this.settings);
-        } else {
-            this.optimizer = new CuttingOptimizer(this.parts, this.stocks, this.settings);
-        }
+        // Use Advanced Optimizer
+        const optimizerType = 'advanced';
+        this.optimizer = new AdvancedCuttingOptimizer(this.parts, this.stocks, this.settings);
 
         this.optimizer.setProgressCallback((progress) => {
             this.updateProgress(progress.message, progress.percentage);
         });
 
         try {
-            const results = await this.optimizer.optimize();
-            // Append solutions with optimizer type metadata
-            results.forEach(solution => {
-                this.solutions.push({
-                    solution: solution,
-                    optimizer: optimizerType
-                });
-            });
+            this.solutions = await this.optimizer.optimize();
             this.renderSolutions();
             this.saveToStorage();
         } catch (error) {
@@ -490,20 +467,20 @@ class CutOptimizationApp {
 
         if (sortBy === 'waste') {
             sorted.sort((a, b) => {
-                const aWaste = (a.solution.wastePercentage !== undefined && a.solution.wastePercentage !== null) ? a.solution.wastePercentage : 0;
-                const bWaste = (b.solution.wastePercentage !== undefined && b.solution.wastePercentage !== null) ? b.solution.wastePercentage : 0;
+                const aWaste = (a.wastePercentage !== undefined && a.wastePercentage !== null) ? a.wastePercentage : 0;
+                const bWaste = (b.wastePercentage !== undefined && b.wastePercentage !== null) ? b.wastePercentage : 0;
                 return aWaste - bWaste;
             });
         } else if (sortBy === 'cuts') {
             sorted.sort((a, b) => {
-                const aCuts = (a.solution.totalCuts !== undefined && a.solution.totalCuts !== null) ? a.solution.totalCuts : 0;
-                const bCuts = (b.solution.totalCuts !== undefined && b.solution.totalCuts !== null) ? b.solution.totalCuts : 0;
+                const aCuts = (a.totalCuts !== undefined && a.totalCuts !== null) ? a.totalCuts : 0;
+                const bCuts = (b.totalCuts !== undefined && b.totalCuts !== null) ? b.totalCuts : 0;
                 return aCuts - bCuts;
             });
         } else if (sortBy === 'length') {
             sorted.sort((a, b) => {
-                const aLength = (a.solution.totalCutLength !== undefined && a.solution.totalCutLength !== null) ? a.solution.totalCutLength : 0;
-                const bLength = (b.solution.totalCutLength !== undefined && b.solution.totalCutLength !== null) ? b.solution.totalCutLength : 0;
+                const aLength = (a.totalCutLength !== undefined && a.totalCutLength !== null) ? a.totalCutLength : 0;
+                const bLength = (b.totalCutLength !== undefined && b.totalCutLength !== null) ? b.totalCutLength : 0;
                 return aLength - bLength;
             });
         }
@@ -515,9 +492,7 @@ class CutOptimizationApp {
         // ...existing code...
 
         container.innerHTML = '';
-        sorted.forEach((item, index) => {
-            const solution = item.solution;
-            const optimizerType = item.optimizer;
+        sorted.forEach((solution, index) => {
             const div = document.createElement('div');
             div.className = 'solution-item';
             if (this.currentSolution === solution) {
@@ -530,9 +505,7 @@ class CutOptimizationApp {
             const totalCuts = (solution.totalCuts !== undefined && solution.totalCuts !== null) ? solution.totalCuts : 0;
             const totalCutLength = (solution.totalCutLength !== undefined && solution.totalCutLength !== null) ? solution.totalCutLength : 0;
 
-            const optimizerLabel = optimizerType === 'advanced' ? 'Advanced' : 'Original';
             div.innerHTML = `
-                <div class="solution-item-title">#${index + 1} <span class="optimizer-badge">${optimizerLabel}</span></div>
                 <div class="solution-item-stats">
                     <div><span class="stat-label">Waste:</span> <span class="stat-value">${wastePercentage.toFixed(1)}%</span></div>
                     <div><span class="stat-label">Sheets:</span> <span class="stat-value">${sheetsUsed}</span></div>

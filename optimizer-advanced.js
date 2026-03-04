@@ -491,6 +491,14 @@ class AdvancedCuttingOptimizer {
      * Record a complete solution
      */
     recordSolution(stocks, metadata) {
+        // Generate visualization-friendly cuts for each stock so UI can display them
+        try {
+            this.generateCutsForStocks(stocks);
+        } catch (e) {
+            // Non-fatal: continue even if cut generation fails
+            console.warn('Cut generation failed:', e);
+        }
+
         const sheets = stocks.filter(s => s.placed.length > 0).map(stock => {
             const totalArea = stock.usableLength * stock.usableWidth;
             const usedArea = stock.placed.reduce((sum, p) => sum + p.area, 0);
@@ -552,6 +560,99 @@ class AdvancedCuttingOptimizer {
             placed: s.placed.map(p => ({ ...p })),
             cuts: [...s.cuts]
         }));
+    }
+
+    /**
+     * Generate simple guillotine cuts for a set of stocks based on placed parts.
+     * Produces vertical cuts at distinct x edges and horizontal cuts at distinct y edges.
+     * This is a heuristic / visualization aid (not an exact cutter plan).
+     */
+    generateCutsForStocks(stocks) {
+        const kerf = parseFloat(this.settings.kerf_thickness) || 0;
+        stocks.forEach((stock, sIdx) => {
+            stock.cuts = this.generateCutsForStock(stock, kerf);
+        });
+    }
+
+    generateCutsForStock(stock, kerf) {
+        const cuts = [];
+        const placed = stock.placed || [];
+        const area = { x: stock.x, y: stock.y, length: stock.usableLength, width: stock.usableWidth };
+
+        // Collect unique candidate cut positions (edges of placed parts)
+        const xEdges = new Set();
+        const yEdges = new Set();
+
+        placed.forEach(p => {
+            // edges relative to area origin
+            const rightEdge = p.x + p.length - stock.x; // offset from area.x
+            const bottomEdge = p.y + p.width - stock.y; // offset from area.y
+            if (rightEdge > 0 && rightEdge < area.length) xEdges.add(Math.round(rightEdge * 100) / 100);
+            if (bottomEdge > 0 && bottomEdge < area.width) yEdges.add(Math.round(bottomEdge * 100) / 100);
+        });
+
+        // Convert sets to sorted arrays
+        const xCuts = Array.from(xEdges).sort((a, b) => a - b);
+        const yCuts = Array.from(yEdges).sort((a, b) => a - b);
+
+        let cutNumber = 1;
+
+        // Vertical cuts
+        xCuts.forEach(offset => {
+            const cut = {
+                cut_number: cutNumber++,
+                area: { ...area },
+                direction: 'V',
+                offset: offset, // offset from area.x
+                thickness: kerf,
+                produced_areas: []
+            };
+
+            // Left produced area
+            const leftLength = Math.max(0, offset);
+            const rightLength = Math.max(0, area.length - offset - kerf);
+
+            if (leftLength > 0) {
+                cut.produced_areas.push({ x: area.x, y: area.y, length: leftLength, width: area.width });
+            }
+            if (rightLength > 0) {
+                cut.produced_areas.push({ x: area.x + offset + kerf, y: area.y, length: rightLength, width: area.width });
+            }
+
+            cut.cutLength = area.width;
+            cut.cut_length = cut.cutLength;
+
+            cuts.push(cut);
+        });
+
+        // Horizontal cuts
+        yCuts.forEach(offset => {
+            const cut = {
+                cut_number: cutNumber++,
+                area: { ...area },
+                direction: 'H',
+                offset: offset, // offset from area.y
+                thickness: kerf,
+                produced_areas: []
+            };
+
+            const topHeight = Math.max(0, offset);
+            const bottomHeight = Math.max(0, area.width - offset - kerf);
+
+            if (topHeight > 0) {
+                cut.produced_areas.push({ x: area.x, y: area.y, length: area.length, width: topHeight });
+            }
+            if (bottomHeight > 0) {
+                cut.produced_areas.push({ x: area.x, y: area.y + offset + kerf, length: area.length, width: bottomHeight });
+            }
+
+            cut.cutLength = area.length;
+            cut.cut_length = cut.cutLength;
+
+            cuts.push(cut);
+        });
+
+        return cuts;
     }
 
     /**
@@ -722,17 +823,78 @@ class SolutionAdvanced {
             id: this.id,
             sheetsUsed: this.sheetsUsed,
             partsPlaced: this.partsPlaced,
+            totalUsedArea: this.totalUsedArea,
+            totalWastedArea: this.totalWastedArea,
+            totalArea: this.totalArea,
             utilization: this.utilization,
+            wastePercentage: this.wastePercentage,
+            totalCuts: this.totalCuts,
+            totalCutLength: this.totalCutLength,
+            createdAt: this.createdAt,
             sheets: this.sheets.map(sheet => ({
-                stock: sheet.stock.label,
+                stock: sheet.stock ? {
+                    label: sheet.stock.label,
+                    length: sheet.stock.length,
+                    width: sheet.stock.width
+                } : null,
                 placed: sheet.placed.map(p => ({
-                    part: p.part.label,
+                    part: {
+                        label: p.part.label,
+                        length: p.part.length,
+                        width: p.part.width
+                    },
                     x: p.x,
                     y: p.y,
-                    rotated: p.rotated
-                }))
+                    length: p.length,
+                    width: p.width,
+                    rotated: p.rotated,
+                    area: p.area
+                })),
+                cuts: sheet.cuts || [],
+                utilization: sheet.utilization,
+                usedArea: sheet.usedArea,
+                totalArea: sheet.totalArea,
+                wastedArea: sheet.wastedArea
             }))
         };
+    }
+
+    /**
+     * Reconstruct SolutionAdvanced from JSON
+     */
+    static fromJSON(obj) {
+        const sheets = (obj.sheets || []).map(sheetData => ({
+            stock: sheetData.stock,
+            placed: (sheetData.placed || []).map(p => ({
+                part: p.part,
+                x: p.x,
+                y: p.y,
+                length: p.length,
+                width: p.width,
+                rotated: p.rotated,
+                area: p.area
+            })),
+            cuts: sheetData.cuts || [],
+            utilization: sheetData.utilization || 0,
+            usedArea: sheetData.usedArea || 0,
+            totalArea: sheetData.totalArea || 0,
+            wastedArea: sheetData.wastedArea || 0
+        }));
+
+        const solution = new SolutionAdvanced(obj.id, sheets, {});
+        // Restore calculated metrics if available
+        if (obj.totalUsedArea !== undefined) {
+            solution.totalUsedArea = obj.totalUsedArea;
+            solution.totalWastedArea = obj.totalWastedArea;
+            solution.totalArea = obj.totalArea;
+            solution.utilization = obj.utilization;
+            solution.wastePercentage = obj.wastePercentage;
+            solution.totalCuts = obj.totalCuts || 0;
+            solution.totalCutLength = obj.totalCutLength || 0;
+        } else {
+            solution.calculateMetrics();
+        }
+        return solution;
     }
 }
 

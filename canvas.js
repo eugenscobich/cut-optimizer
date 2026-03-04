@@ -68,6 +68,9 @@ class CanvasRenderer {
                 this.panX = e.clientX - this.dragStartX;
                 this.panY = e.clientY - this.dragStartY;
                 this.render();
+            } else {
+                // Update hover cursor when not dragging
+                this.updateHoverCursor(e);
             }
         });
 
@@ -77,6 +80,29 @@ class CanvasRenderer {
 
         this.canvas.addEventListener('mouseleave', () => {
             this.isDragging = false;
+            this.canvas.style.cursor = 'default';
+        });
+
+        // Click handler to select cuts
+        this.canvas.addEventListener('click', (e) => {
+            // If dragging occurred recently, ignore click
+            if (this.isDragging) return;
+            const rect = this.canvas.getBoundingClientRect();
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+            const worldX = this.untransformX(canvasX);
+            const worldY = this.untransformY(canvasY);
+
+            const hit = this.findCutAt(worldX, worldY);
+            if (hit) {
+                // Delegate to global app if available to keep state consistent
+                if (typeof app !== 'undefined' && app && typeof app.selectCut === 'function') {
+                    app.selectCut(hit.sheetIndex, hit.cutIndex);
+                } else {
+                    this.currentSelectedCut = { sheetIndex: hit.sheetIndex, cutIndex: hit.cutIndex };
+                    this.render(this.currentSolution, this.currentSelectedCut);
+                }
+            }
         });
     }
 
@@ -303,12 +329,29 @@ class CanvasRenderer {
     }
 
     drawCuts(cuts, offsetX, offsetY, stock, selectedCut = null, sheetIndex = 0) {
+        // Draw all cuts (thin lines) and highlight selected one
         cuts.forEach((cut, cutIndex) => {
             const isSelected = selectedCut && selectedCut.sheetIndex === sheetIndex && selectedCut.cutIndex === cutIndex;
 
-            // Use different color and width for selected cuts
-            if (isSelected) {
-                // Draw produced sub-areas (transparent rectangles) so user can see how the area is split
+            // Draw base (unselected) cut as thin line
+            if (!isSelected) {
+                this.ctx.strokeStyle = this.colors.cutEdge;
+                this.ctx.lineWidth = 1 / Math.max(1, this.scale);
+                if (cut.direction === 'H') {
+                    const x = offsetX + cut.area.x;
+                    const y = offsetY + cut.area.y + cut.offset;
+                    const length = cut.area.length;
+                    const width = Math.max(1, cut.thickness || 1);
+                    this.ctx.strokeRect(x, y, length - 1, width - 1);
+                } else if (cut.direction === 'V') {
+                    const x = offsetX + cut.area.x + cut.offset;
+                    const y = offsetY + cut.area.y;
+                    const length = Math.max(1, cut.thickness || 1);
+                    const width = cut.area.width;
+                    this.ctx.strokeRect(x, y, length - 1, width - 1);
+                }
+            } else {
+                // Selected cut rendering (highlight and show produced areas)
                 if (cut.produced_areas && cut.produced_areas.length > 0) {
                     // translucent fill for sub-areas
                     this.ctx.fillStyle = 'rgba(255, 200, 0, 0.12)';
@@ -346,6 +389,59 @@ class CanvasRenderer {
                 }
             }
         });
+    }
+
+    // Find if a cut exists at world coordinates (x,y). Returns {sheetIndex, cutIndex} or null
+    findCutAt(worldX, worldY) {
+        if (!this.currentSolution || !Array.isArray(this.currentSolution.sheets)) return null;
+
+        const tolerance = 6 / Math.max(this.scale, 0.0001); // pixels -> world units
+
+        let currentY = 0;
+        for (let s = 0; s < this.currentSolution.sheets.length; s++) {
+            const sheet = this.currentSolution.sheets[s];
+            const stock = sheet.stock;
+            const cuts = sheet.cuts || [];
+
+            // Sheet origin in world coords
+            const originX = 0;
+            const originY = currentY;
+
+            for (let c = 0; c < cuts.length; c++) {
+                const cut = cuts[c];
+                if (cut.direction === 'H') {
+                    const x = originX + cut.area.x;
+                    const y = originY + cut.area.y + cut.offset;
+                    const w = cut.area.length;
+                    const h = Math.max(1, cut.thickness || 1);
+                    if (worldX >= x - tolerance && worldX <= x + w + tolerance && worldY >= y - tolerance && worldY <= y + h + tolerance) {
+                        return { sheetIndex: s, cutIndex: c };
+                    }
+                } else if (cut.direction === 'V') {
+                    const x = originX + cut.area.x + cut.offset;
+                    const y = originY + cut.area.y;
+                    const w = Math.max(1, cut.thickness || 1);
+                    const h = cut.area.width;
+                    if (worldX >= x - tolerance && worldX <= x + w + tolerance && worldY >= y - tolerance && worldY <= y + h + tolerance) {
+                        return { sheetIndex: s, cutIndex: c };
+                    }
+                }
+            }
+
+            currentY += stock.width + 20;
+        }
+
+        return null;
+    }
+
+    updateHoverCursor(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX = e.clientX - rect.left;
+        const canvasY = e.clientY - rect.top;
+        const worldX = this.untransformX(canvasX);
+        const worldY = this.untransformY(canvasY);
+        const hit = this.findCutAt(worldX, worldY);
+        this.canvas.style.cursor = hit ? 'pointer' : 'grab';
     }
 
     // Export canvas as image
