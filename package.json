@@ -23,8 +23,6 @@
     "@angular/router": "^18.0.0",
     "ag-grid-angular": "^32.0.0",
     "ag-grid-community": "^32.0.0",
-    "dockview": "^1.18.0",
-    "opencascade.js": "^1.4.0",
     "three": "^0.160.0",
     "rxjs": "^7.8.0",
     "tslib": "^2.6.0",
