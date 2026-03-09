@@ -1,0 +1,98 @@
+<div class="right-panel-container">
+  <!-- Control Buttons -->
+  <section class="control-section">
+    <button
+      (click)="startOptimization()"
+      [disabled]="isOptimizing"
+      class="btn btn-primary"
+    >
+      Start Optimization
+    </button>
+    <button
+      (click)="stopOptimization()"
+      [disabled]="!isOptimizing"
+      class="btn btn-secondary"
+    >
+      Stop
+    </button>
+    <div *ngIf="isOptimizing" class="optimization-status">
+      <span class="spinner"></span>
+      Optimizing...
+    </div>
+  </section>
+
+  <!-- Solutions List -->
+  <section class="panel-section">
+    <h3>Solutions</h3>
+    <div class="solutions-list">
+      <div
+        *ngFor="let solution of solutions"
+        (click)="selectSolution(solution)"
+        [class.selected]="selectedSolution === solution"
+        class="solution-item"
+      >
+        <div class="solution-id">Solution #{{ solution.id }}</div>
+        <div class="solution-stats">
+          <span>Sheets: {{ solution.statistics.global.sheetsUsed }}</span>
+          <span>Waste: {{ (solution.statistics.global.totalWastedArea | number: '1.0-0') }}mm²</span>
+        </div>
+      </div>
+      <div *ngIf="solutions.length === 0" class="empty-state">
+        No solutions yet. Click "Start Optimization" to generate solutions.
+      </div>
+    </div>
+  </section>
+
+  <!-- Statistics -->
+  <section class="panel-section" *ngIf="selectedSolution">
+    <h3>Statistics</h3>
+    <div class="stats-container">
+      <div class="stat-item">
+        <span class="label">Sheets Used:</span>
+        <span class="value">{{ selectedSolution.statistics.global.sheetsUsed }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">Total Used Area:</span>
+        <span class="value">{{ (selectedSolution.statistics.global.totalUsedArea | number: '1.0-0') }}mm²</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">Total Waste:</span>
+        <span class="value">{{ (selectedSolution.statistics.global.totalWastedArea | number: '1.0-0') }}mm²</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">Total Cuts:</span>
+        <span class="value">{{ selectedSolution.statistics.global.totalCuts }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">Total Cut Length:</span>
+        <span class="value">{{ (selectedSolution.statistics.global.totalCutLength | number: '1.0-0') }}mm</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cuts List -->
+  <section class="panel-section" *ngIf="selectedSolution">
+    <h3>Cuts</h3>
+    <div class="cuts-list">
+      <div
+        *ngFor="let sheet of selectedSolution.usedSheets"
+        class="sheet-cuts"
+      >
+        <div class="sheet-label">Sheet {{ sheet.stock.number }}: {{ sheet.stock.label }}</div>
+        <div
+          *ngFor="let cut of sheet.cuts"
+          (click)="selectCut(cut)"
+          [class.selected]="selectedCut === cut"
+          class="cut-item"
+        >
+          <span class="cut-direction">{{ cut.direction }}</span>
+          <span class="cut-length">{{ (cut.length | number: '1.0-0') }}mm</span>
+        </div>
+      </div>
+      <div *ngIf="selectedSolution.usedSheets.length === 0" class="empty-state">
+        No cuts available.
+      </div>
+    </div>
+  </section>
+</div>
+

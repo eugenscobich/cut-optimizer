@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Production
+dist/
+build/
+out/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Angular
+.angular/
+.angular-ide.json
+
+# TypeScript
+*.js
+*.js.map
+*.d.ts
+!src/**/*.js
+
+# Testing
+coverage/
+.nyc_output/
+junit.xml
+
+# Misc
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+Thumbs.db
+

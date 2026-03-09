@@ -1,0 +1,101 @@
+<div class="left-panel-container">
+  <!-- Parts Section -->
+  <section class="panel-section">
+    <h3>Parts</h3>
+    <div class="section-controls">
+      <input
+        type="file"
+        accept=".csv"
+        (change)="onPartsCSVUpload($event)"
+        style="display: none"
+        #partsFileInput
+      />
+      <button (click)="partsFileInput.click()">Upload CSV</button>
+      <button (click)="addPart()">Add Part</button>
+    </div>
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Label</th>
+            <th>Length</th>
+            <th>Width</th>
+            <th>Qty</th>
+            <th>Enabled</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let part of parts; let i = index">
+            <td>{{ part.number }}</td>
+            <td><input [(ngModel)]="part.label" type="text" /></td>
+            <td><input [(ngModel)]="part.length" type="number" /></td>
+            <td><input [(ngModel)]="part.width" type="number" /></td>
+            <td><input [(ngModel)]="part.quantity" type="number" /></td>
+            <td><input [(ngModel)]="part.enabled" type="checkbox" /></td>
+            <td><button (click)="removePart(i)">Remove</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Stocks Section -->
+  <section class="panel-section">
+    <h3>Stocks</h3>
+    <div class="section-controls">
+      <input
+        type="file"
+        accept=".csv"
+        (change)="onStocksCSVUpload($event)"
+        style="display: none"
+        #stocksFileInput
+      />
+      <button (click)="stocksFileInput.click()">Upload CSV</button>
+      <button (click)="addStock()">Add Stock</button>
+    </div>
+    <div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Label</th>
+            <th>Length</th>
+            <th>Width</th>
+            <th>Qty</th>
+            <th>Enabled</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let stock of stocks; let i = index">
+            <td>{{ stock.number }}</td>
+            <td><input [(ngModel)]="stock.label" type="text" /></td>
+            <td><input [(ngModel)]="stock.length" type="number" /></td>
+            <td><input [(ngModel)]="stock.width" type="number" /></td>
+            <td><input [(ngModel)]="stock.quantity" type="number" /></td>
+            <td><input [(ngModel)]="stock.enabled" type="checkbox" /></td>
+            <td><button (click)="removeStock(i)">Remove</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Settings Section -->
+  <section class="panel-section">
+    <h3>Settings</h3>
+    <div class="settings-form">
+      <label>
+        Kerf Thickness (mm):
+        <input [(ngModel)]="settings.kerf_thickness" type="number" step="0.1" />
+      </label>
+      <label>
+        Default Cut Perimeter (mm):
+        <input [(ngModel)]="settings.default_stock_cut_perimeter" type="number" />
+      </label>
+    </div>
+  </section>
+</div>
+
