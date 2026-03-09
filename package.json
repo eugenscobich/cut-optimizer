@@ -25,7 +25,7 @@
     "ag-grid-community": "^32.0.0",
     "dockview": "^1.18.0",
     "opencascade.js": "^1.4.0",
-    "three": "^r128",
+    "three": "^0.160.0",
     "rxjs": "^7.8.0",
     "tslib": "^2.6.0",
     "zone.js": "^0.14.0"
@@ -35,7 +35,7 @@
     "@angular/cli": "^18.0.0",
     "@angular/compiler-cli": "^18.0.0",
     "@types/node": "^20.0.0",
-    "@types/three": "^r128",
+    "@types/three": "^0.160.0",
     "typescript": "~5.4.0"
   }
 }
