@@ -1,28 +1,20 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { DockviewComponent } from 'dockview';
-import { LeftPanelComponent } from '@components/left-panel/left-panel.component';
-import { ViewportComponent } from '@components/viewport/viewport.component';
-import { RightPanelComponent } from '@components/right-panel/right-panel.component';
+import { DynamicCompItem } from './dynamic-comp-parent/dynamic-comp.model';
+import { DynamicCompService } from './dynamic-comp-parent/dynamic-comp.service';
 
 @Component({
   selector: 'app-root',
-  standalone: true,
-  imports: [
-    CommonModule,
-    DockviewComponent,
-    LeftPanelComponent,
-    ViewportComponent,
-    RightPanelComponent
-  ],
+
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.scss']
+  styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
-  title = 'Cut Optimizer';
+  title = 'angular-dockview';
+  compList: DynamicCompItem[] = [];
 
+  constructor(private dynamicCompServ: DynamicCompService) { }
   ngOnInit(): void {
-    console.log('Cut Optimizer Application initialized');
+    this.compList = this.dynamicCompServ.getListOfComponent()
   }
-}
 
+}

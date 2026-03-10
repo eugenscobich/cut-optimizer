@@ -1,3 +1,4 @@
+/* To learn more about this file see: https://angular.io/config/tsconfig. */
 {
   "compileOnSave": false,
   "compilerOptions": {
@@ -21,13 +22,7 @@
     "lib": [
       "ES2022",
       "dom"
-    ],
-    "paths": {
-      "@app/*": ["src/app/*"],
-      "@models/*": ["src/app/models/*"],
-      "@services/*": ["src/app/services/*"],
-      "@components/*": ["src/app/components/*"]
-    }
+    ]
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
@@ -36,4 +31,3 @@
     "strictTemplates": true
   }
 }
-

@@ -1,47 +1,42 @@
-# Dependencies
-node_modules/
-package-lock.json
-yarn.lock
+# See http://help.github.com/ignore-files/ for more about ignoring files.
 
-# Production
-dist/
-build/
-out/
+# Compiled output
+/dist
+/tmp
+/out-tsc
+/bazel-out
 
-# IDEs
+# Node
+/node_modules
+npm-debug.log
+yarn-error.log
+
+# IDEs and editors
 .idea/
-.vscode/
-*.swp
-*.swo
-*.swn
-.DS_Store
-*.sublime-project
+.project
+.classpath
+.c9/
+*.launch
+.settings/
 *.sublime-workspace
 
-# Angular
-.angular/
-.angular-ide.json
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
 
-# TypeScript
-*.js
-*.js.map
-*.d.ts
-!src/**/*.js
+# Miscellaneous
+/.angular/cache
+.sass-cache/
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
 
-# Testing
-coverage/
-.nyc_output/
-junit.xml
-
-# Misc
-.env
-.env.local
-.env.*.local
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS
+# System files
+.DS_Store
 Thumbs.db
-
