@@ -1,0 +1,17 @@
+<section class="viewport-shell" #host>
+  <canvas #canvas aria-label="Stock 3D viewport"></canvas>
+
+  <div class="viewport-overlay">
+    <p class="status-chip">{{ viewportStatus() }}</p>
+    <p class="status-chip status-chip--secondary">{{ openCascadeStatus() }}</p>
+    <p class="status-chip status-chip--hint">Drag to rotate · Shift/right drag to pan · Wheel to zoom</p>
+  </div>
+
+  @if (renderedStockCount() === 0) {
+    <div class="empty-state">
+      <strong>No enabled stock sheets</strong>
+      <span>Enable a stock row or increase its quantity to preview the solid here.</span>
+    </div>
+  }
+</section>
+

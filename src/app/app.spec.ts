@@ -22,6 +22,6 @@ describe('App', () => {
     expect(compiled.querySelector('app-menubar')).not.toBeNull();
     expect(compiled.querySelector('app-parts-management')).not.toBeNull();
     expect(compiled.querySelector('app-stocks-management')).not.toBeNull();
-    expect(compiled.querySelector('canvas')).not.toBeNull();
+    expect(compiled.querySelector('app-stock-viewport')).not.toBeNull();
   });
 });

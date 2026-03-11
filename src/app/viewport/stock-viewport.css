@@ -1,0 +1,83 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.viewport-shell {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #d9e0e7;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.92), rgba(226, 232, 240, 0.95)),
+    linear-gradient(180deg, #f8fafc, #e2e8f0);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+canvas:active {
+  cursor: grabbing;
+}
+
+.viewport-overlay {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  right: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.status-chip {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.status-chip--secondary {
+  color: #0f766e;
+}
+
+.status-chip--hint {
+  color: #475569;
+  font-weight: 500;
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 1rem;
+  color: #475569;
+  text-align: center;
+  background: rgba(248, 250, 252, 0.55);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.empty-state strong {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
