@@ -19,7 +19,23 @@ describe('StockViewportComponent', () => {
     expect(component).toBeTruthy();
     expect(compiled.querySelector('canvas[aria-label="Stock 3D viewport"]')).not.toBeNull();
     expect(compiled.querySelector('[aria-label="Viewport mode"]')).not.toBeNull();
+    expect(compiled.querySelector('[aria-label="Camera projection"]')).not.toBeNull();
     expect(compiled.textContent).toContain('Drag to rotate');
+  });
+
+  it('should switch to orthographic projection mode', async () => {
+    const fixture = TestBed.createComponent(StockViewportComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const orthographicButton = compiled.querySelectorAll<HTMLButtonElement>('.view-mode-button')[3];
+
+    orthographicButton?.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.projectionMode()).toBe('orthographic');
+    expect(orthographicButton?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('should switch to a locked 2D plan mode', async () => {

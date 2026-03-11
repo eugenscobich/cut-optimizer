@@ -22,6 +22,26 @@
         2D
       </button>
     </div>
+    <div class="view-mode-toggle" role="group" aria-label="Camera projection">
+      <button
+        type="button"
+        class="view-mode-button"
+        [class.view-mode-button--active]="projectionMode() === 'perspective'"
+        [attr.aria-pressed]="projectionMode() === 'perspective'"
+        (click)="setProjectionMode('perspective')"
+      >
+        Perspective
+      </button>
+      <button
+        type="button"
+        class="view-mode-button"
+        [class.view-mode-button--active]="projectionMode() === 'orthographic'"
+        [attr.aria-pressed]="projectionMode() === 'orthographic'"
+        (click)="setProjectionMode('orthographic')"
+      >
+        Ortho
+      </button>
+    </div>
     <p class="status-chip">{{ viewportStatus() }}</p>
     <p class="status-chip status-chip--secondary">{{ openCascadeStatus() }}</p>
     <p class="status-chip status-chip--hint">{{ interactionHint() }}</p>

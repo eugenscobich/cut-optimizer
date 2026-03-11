@@ -13,12 +13,15 @@ import {
   AmbientLight,
   Box3,
   BoxGeometry,
+  Camera,
   CanvasTexture,
   Color,
   DirectionalLight,
+  GridHelper,
   Group,
   Mesh,
   MeshPhysicalMaterial,
+  OrthographicCamera,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
@@ -54,6 +57,8 @@ interface OpenCascadeShapeHandle extends OpenCascadeResource {
 
 type OpenCascadeConstructor = new (...args: number[]) => OpenCascadeShapeHandle;
 type ViewMode = '3d' | '2d';
+type ProjectionMode = 'perspective' | 'orthographic';
+type SupportedCamera = PerspectiveCamera | OrthographicCamera;
 
 const MILLIMETERS_TO_SCENE_UNITS = 0.001;
 const COLUMN_GAP = 0.22;
@@ -61,6 +66,9 @@ const ROW_GAP = 0.3;
 const TARGET_COLUMN_COUNT = 3;
 const STATUS_PREFIX = '3D viewport';
 const COLOR_PALETTE = ['#2563eb', '#0f766e', '#9333ea', '#c2410c', '#be123c', '#047857'];
+const GRID_CELL_SIZE = 0.25;
+const GRID_PADDING = 0.5;
+const GRID_OFFSET = -0.001;
 
 @Component({
   selector: 'app-stock-viewport',
@@ -78,6 +86,7 @@ export class StockViewportComponent implements AfterViewInit {
   readonly viewportStatus = signal(`${STATUS_PREFIX}: preparing renderer…`);
   readonly openCascadeStatus = signal('OpenCascade: loading…');
   readonly viewMode = signal<ViewMode>('3d');
+  readonly projectionMode = signal<ProjectionMode>('perspective');
   readonly renderedStockCount = signal(0);
   readonly interactionHint = computed(() =>
     this.viewMode() === '2d'
@@ -91,13 +100,17 @@ export class StockViewportComponent implements AfterViewInit {
   });
 
   private scene?: Scene;
-  private camera?: PerspectiveCamera;
+  private perspectiveCamera?: PerspectiveCamera;
+  private orthographicCamera?: OrthographicCamera;
+  private activeCamera?: SupportedCamera;
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
+  private gridHelper?: GridHelper;
   private stockGroup?: Group;
   private resizeObserver?: ResizeObserver;
   private openCascade: OpenCascadeInstance | null = null;
   private openCascadeBoxConstructor: OpenCascadeConstructor | null = null;
+  private orthographicHalfHeight = 1;
   private animationFrameActive = false;
 
   constructor() {
@@ -118,6 +131,18 @@ export class StockViewportComponent implements AfterViewInit {
     }
 
     this.viewMode.set(mode);
+    this.applyControlsMode();
+    this.controls?.update();
+    this.fitCameraToScene();
+  }
+
+  setProjectionMode(mode: ProjectionMode): void {
+    if (this.projectionMode() === mode) {
+      return;
+    }
+
+    this.projectionMode.set(mode);
+    this.syncActiveCamera();
     this.applyControlsMode();
     this.controls?.update();
     this.fitCameraToScene();
@@ -192,9 +217,11 @@ export class StockViewportComponent implements AfterViewInit {
         powerPreference: 'high-performance'
       });
       const scene = new Scene();
-      const camera = new PerspectiveCamera(45, 1, 0.01, 200);
-      const controls = new OrbitControls(camera, canvas);
+      const perspectiveCamera = new PerspectiveCamera(45, 1, 0.01, 200);
+      const orthographicCamera = new OrthographicCamera(-1, 1, 1, -1, 0.01, 200);
+      const controls = new OrbitControls(perspectiveCamera, canvas);
       const stockGroup = new Group();
+      const gridHelper = this.createGridHelper(2);
 
       scene.background = new Color('#eef3f8');
       scene.add(new AmbientLight('#ffffff', 1.75));
@@ -207,29 +234,38 @@ export class StockViewportComponent implements AfterViewInit {
       fillLight.position.set(-6, 5, -4);
       scene.add(fillLight);
 
+      scene.add(gridHelper);
       scene.add(stockGroup);
 
-      camera.position.set(2.6, 1.8, 2.4);
+      perspectiveCamera.position.set(2.6, 1.8, 2.4);
+      orthographicCamera.position.copy(perspectiveCamera.position);
 
       controls.enablePan = true;
       controls.enableRotate = true;
-      controls.enableZoom = true;
-      controls.enableDamping = true;
+      controls.enableZoom = false;
+      controls.zoomToCursor = true;
+      controls.zoomSpeed = 4;
+      controls.enableDamping = false;
+      controls.screenSpacePanning = true;
       controls.dampingFactor = 0.08;
-      controls.minDistance = 0.15;
-      controls.maxDistance = 40;
-      controls.target.set(0, 0.12, 0);
+      //controls.minDistance = 0.15;
+      //controls.maxDistance = 40;
+      controls.target.set(0, 0, 0);
       controls.update();
 
       renderer.outputColorSpace = SRGBColorSpace;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
       this.scene = scene;
-      this.camera = camera;
+      this.perspectiveCamera = perspectiveCamera;
+      this.orthographicCamera = orthographicCamera;
+      this.activeCamera = perspectiveCamera;
       this.renderer = renderer;
       this.controls = controls;
+      this.gridHelper = gridHelper;
       this.stockGroup = stockGroup;
 
+      this.syncActiveCamera();
       this.applyControlsMode();
       this.handleResize(host.clientWidth, host.clientHeight);
       this.setupResizeObserver(host);
@@ -270,6 +306,7 @@ export class StockViewportComponent implements AfterViewInit {
     this.renderedStockCount.set(stocks.length);
 
     if (stocks.length === 0) {
+      this.updateGridHelper();
       this.viewportStatus.set(`${STATUS_PREFIX}: no enabled stock sheets to display.`);
       return;
     }
@@ -287,17 +324,18 @@ export class StockViewportComponent implements AfterViewInit {
 
       mesh.position.set(
         previousColumnWidth + length / 2 + columnIndex * COLUMN_GAP,
-        thickness / 2,
-        previousRowDepth + width / 2 + rowIndex * ROW_GAP
+        previousRowDepth + width / 2 + rowIndex * ROW_GAP,
+        thickness / 2
       );
 
       if (stock.ignoreDirection) {
-        mesh.rotation.y = Math.PI / 2;
+        mesh.rotation.z = Math.PI / 2;
       }
 
       this.stockGroup?.add(mesh);
     });
 
+    this.updateGridHelper(new Box3().setFromObject(this.stockGroup));
     this.fitCameraToScene();
 
     const pluralSuffix = stocks.length === 1 ? '' : 's';
@@ -355,7 +393,7 @@ export class StockViewportComponent implements AfterViewInit {
     width: number,
     thickness: number
   ): Mesh {
-    const geometry = new BoxGeometry(length, thickness, width);
+    const geometry = new BoxGeometry(length, width, thickness);
     const material = new MeshPhysicalMaterial({
       color: COLOR_PALETTE[(stock.stockNumber - 1) % COLOR_PALETTE.length],
       roughness: 0.52,
@@ -459,7 +497,9 @@ export class StockViewportComponent implements AfterViewInit {
   }
 
   private fitCameraToScene(): void {
-    if (!this.camera || !this.controls || !this.stockGroup) {
+    const camera = this.getActiveCamera();
+
+    if (!camera || !this.controls || !this.stockGroup) {
       return;
     }
 
@@ -467,7 +507,7 @@ export class StockViewportComponent implements AfterViewInit {
 
     if (contentBounds.isEmpty()) {
       this.applyControlsMode();
-      this.controls.target.set(0, 0.1, 0);
+      this.controls.target.set(0, 0, 0);
       this.controls.update();
       return;
     }
@@ -475,15 +515,7 @@ export class StockViewportComponent implements AfterViewInit {
     const center = contentBounds.getCenter(new Vector3());
     const size = contentBounds.getSize(new Vector3());
     const maxDimension = Math.max(size.x, size.y, size.z, 0.5);
-    const horizontalFov = 2 * Math.atan(Math.tan((this.camera.fov * Math.PI) / 360) * this.camera.aspect);
-    const fitHeightDistance = maxDimension / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
-    const fitWidthDistance = maxDimension / (2 * Math.tan(horizontalFov / 2));
-    const distance = 1.45 * Math.max(fitHeightDistance, fitWidthDistance);
-
-    this.camera.near = Math.max(0.01, distance / 100);
-    this.camera.far = Math.max(200, distance * 40);
-    this.camera.position.copy(this.getViewModeCameraPosition(center, distance));
-    this.camera.updateProjectionMatrix();
+    this.fitCameraProjection(camera, center, maxDimension);
 
     this.controls.target.copy(center);
     this.applyControlsMode();
@@ -491,42 +523,105 @@ export class StockViewportComponent implements AfterViewInit {
   }
 
   private applyControlsMode(): void {
-    if (!this.camera || !this.controls) {
+    const camera = this.getActiveCamera();
+
+    if (!camera || !this.controls) {
       return;
     }
 
     const isPlanView = this.viewMode() === '2d';
 
-    this.camera.up.set(0, isPlanView ? 0 : 1, isPlanView ? -1 : 0);
+    camera.up.set(0, 1, 0);
     this.controls.enableRotate = !isPlanView;
     this.controls.enablePan = true;
     this.controls.enableZoom = true;
     this.controls.screenSpacePanning = isPlanView;
-    this.controls.minPolarAngle = isPlanView ? 0 : 0;
-    this.controls.maxPolarAngle = isPlanView ? 0 : Math.PI;
+    this.controls.minPolarAngle = isPlanView ? Math.PI / 2 : 0;
+    this.controls.maxPolarAngle = isPlanView ? Math.PI / 2 : Math.PI;
+    this.controls.minAzimuthAngle = isPlanView ? 0 : -Infinity;
+    this.controls.maxAzimuthAngle = isPlanView ? 0 : Infinity;
   }
 
   private getViewModeCameraPosition(center: Vector3, distance: number): Vector3 {
     if (this.viewMode() === '2d') {
-      return center.clone().add(new Vector3(0, distance, 0));
+      return center.clone().add(new Vector3(0, 0, distance));
     }
 
     return center.clone().add(new Vector3(1, 0.65, 1).normalize().multiplyScalar(distance));
   }
 
+  private createGridHelper(size: number): GridHelper {
+    const snappedSize = Math.max(1, Math.ceil(size / GRID_CELL_SIZE) * GRID_CELL_SIZE);
+    const divisions = Math.max(4, Math.round(snappedSize / GRID_CELL_SIZE));
+    const gridHelper = new GridHelper(snappedSize, divisions, '#94a3b8', '#cbd5e1');
+
+    gridHelper.rotation.x = Math.PI / 2;
+    gridHelper.position.z = GRID_OFFSET;
+    gridHelper.renderOrder = -1;
+
+    if (Array.isArray(gridHelper.material)) {
+      gridHelper.material.forEach((material) => {
+        material.transparent = true;
+        material.opacity = 0.5;
+      });
+    } else {
+      gridHelper.material.transparent = true;
+      gridHelper.material.opacity = 0.5;
+    }
+
+    return gridHelper;
+  }
+
+  private updateGridHelper(bounds?: Box3): void {
+    if (!this.scene) {
+      return;
+    }
+
+    let nextGridSize = 2;
+    let nextGridCenter = new Vector3(0, 0, GRID_OFFSET);
+
+    if (bounds && !bounds.isEmpty()) {
+      nextGridSize = Math.max(bounds.getSize(new Vector3()).x, bounds.getSize(new Vector3()).y) + GRID_PADDING * 2;
+      nextGridCenter = bounds.getCenter(new Vector3());
+    }
+
+    const nextGridHelper = this.createGridHelper(nextGridSize);
+
+    nextGridHelper.position.set(nextGridCenter.x, nextGridCenter.y, GRID_OFFSET);
+
+    if (this.gridHelper) {
+      this.scene.remove(this.gridHelper);
+      this.disposeGridHelper(this.gridHelper);
+    }
+
+    this.gridHelper = nextGridHelper;
+    this.scene.add(nextGridHelper);
+  }
+
   private handleResize(width: number, height: number): void {
-    if (!this.renderer || !this.camera) {
+    if (!this.renderer) {
       return;
     }
 
     const safeWidth = Math.max(width, 320);
     const safeHeight = Math.max(height, 240);
 
-    this.camera.aspect = safeWidth / safeHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(safeWidth, safeHeight, false);
-  }
+    if (this.perspectiveCamera) {
+      this.perspectiveCamera.aspect = safeWidth / safeHeight;
+      this.perspectiveCamera.updateProjectionMatrix();
+    }
 
+    if (this.orthographicCamera) {
+      this.applyOrthographicFrustum(this.orthographicCamera, safeWidth / safeHeight);
+      this.orthographicCamera.updateProjectionMatrix();
+    }
+
+    this.renderer.setSize(safeWidth, safeHeight, false);
+
+    if (this.projectionMode() === 'orthographic') {
+      this.controls?.update();
+    }
+  }
   private setupResizeObserver(host: HTMLElement): void {
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver((entries) => {
@@ -558,14 +653,20 @@ export class StockViewportComponent implements AfterViewInit {
   }
 
   private startRenderLoop(): void {
-    if (!this.renderer || !this.scene || !this.camera || !this.controls || this.animationFrameActive) {
+    if (!this.renderer || !this.scene || !this.controls || this.animationFrameActive) {
       return;
     }
 
     this.animationFrameActive = true;
     this.renderer.setAnimationLoop(() => {
+      const camera = this.getActiveCamera();
+
+      if (!camera) {
+        return;
+      }
+
       this.controls?.update();
-      this.renderer?.render(this.scene!, this.camera!);
+      this.renderer?.render(this.scene!, camera);
     });
   }
 
@@ -603,13 +704,96 @@ export class StockViewportComponent implements AfterViewInit {
     this.animationFrameActive = false;
     this.resizeObserver?.disconnect();
     this.clearStockGroup();
+    if (this.gridHelper) {
+      this.disposeGridHelper(this.gridHelper);
+    }
     this.controls?.dispose();
     this.renderer?.setAnimationLoop(null);
     this.renderer?.dispose();
     this.scene = undefined;
-    this.camera = undefined;
+    this.perspectiveCamera = undefined;
+    this.orthographicCamera = undefined;
+    this.activeCamera = undefined;
     this.controls = undefined;
+    this.gridHelper = undefined;
     this.stockGroup = undefined;
+  }
+
+  private getActiveCamera(): SupportedCamera | undefined {
+    return this.projectionMode() === 'orthographic' ? this.orthographicCamera : this.perspectiveCamera;
+  }
+
+  private syncActiveCamera(): void {
+    const nextCamera = this.getActiveCamera();
+
+    if (!nextCamera) {
+      return;
+    }
+
+    this.activeCamera = nextCamera;
+
+    if (this.controls) {
+      this.controls.object = nextCamera as Camera;
+    }
+  }
+
+  private fitCameraProjection(
+    camera: SupportedCamera,
+    center: Vector3,
+    maxDimension: number
+  ): number {
+    if (camera instanceof PerspectiveCamera) {
+      const horizontalFov = 2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect);
+      const fitHeightDistance = maxDimension / (2 * Math.tan((camera.fov * Math.PI) / 360));
+      const fitWidthDistance = maxDimension / (2 * Math.tan(horizontalFov / 2));
+      const distance = 1.45 * Math.max(fitHeightDistance, fitWidthDistance);
+
+      camera.near = Math.max(0.01, distance / 100);
+      camera.far = Math.max(200, distance * 40);
+      camera.position.copy(this.getViewModeCameraPosition(center, distance));
+      camera.updateProjectionMatrix();
+
+      return distance;
+    }
+
+    const aspect = this.getViewportAspect();
+    const halfHeight = 0.7 * Math.max(maxDimension / 2, maxDimension / (2 * Math.max(aspect, 0.1)));
+    const distance = Math.max(maxDimension * 2.5, 2);
+
+    this.orthographicHalfHeight = halfHeight;
+    this.applyOrthographicFrustum(camera, aspect);
+    camera.near = Math.max(0.01, distance / 100);
+    camera.far = Math.max(200, distance * 40);
+    camera.position.copy(this.getViewModeCameraPosition(center, distance));
+    camera.updateProjectionMatrix();
+
+    return distance;
+  }
+
+  private applyOrthographicFrustum(camera: OrthographicCamera, aspect: number): void {
+    camera.top = this.orthographicHalfHeight;
+    camera.bottom = -this.orthographicHalfHeight;
+    camera.right = this.orthographicHalfHeight * aspect;
+    camera.left = -this.orthographicHalfHeight * aspect;
+  }
+
+  private getViewportAspect(): number {
+    const host = this.hostRef().nativeElement;
+    const width = Math.max(host.clientWidth, 320);
+    const height = Math.max(host.clientHeight, 240);
+
+    return width / height;
+  }
+
+  private disposeGridHelper(gridHelper: GridHelper): void {
+    gridHelper.geometry.dispose();
+
+    if (Array.isArray(gridHelper.material)) {
+      gridHelper.material.forEach((material) => material.dispose());
+      return;
+    }
+
+    gridHelper.material.dispose();
   }
 
   private disposeOpenCascadeResource(resource: OpenCascadeResource | null): void {

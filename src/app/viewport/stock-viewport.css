@@ -67,6 +67,14 @@ canvas:active {
     box-shadow 120ms ease;
 }
 
+[aria-label='Camera projection'] .view-mode-button:first-child {
+  min-width: 6.5rem;
+}
+
+[aria-label='Camera projection'] .view-mode-button:last-child {
+  min-width: 4.5rem;
+}
+
 .view-mode-button:hover {
   background: rgba(226, 232, 240, 0.95);
 }
