@@ -1,44 +1,54 @@
 <app-menubar></app-menubar>
 <div class="container">
-  <as-split direction="horizontal" gutterSize = 8>
+  <as-split direction="horizontal" [gutterSize]="8">
     <as-split-area size="20">
-      <as-split direction="vertical" gutterSize = 8>
-        <as-split-area size="40">
-          <p>
-            Parts AG Grid
-          </p>
+      <as-split direction="vertical" [gutterSize]="8">
+        <as-split-area size="44">
+          <app-parts-management></app-parts-management>
         </as-split-area>
-        <as-split-area size="40">
-          <p>
+        <as-split-area size="28">
+          <div class="workspace-pane">
+            <p class="placeholder-panel">
             Stocks AG Grid
-          </p>
+            </p>
+          </div>
         </as-split-area>
-        <as-split-area size="40">
-          <p>
+        <as-split-area size="28">
+          <div class="workspace-pane">
+            <p class="placeholder-panel">
             Settings
-          </p>
+            </p>
+          </div>
         </as-split-area>
       </as-split>
     </as-split-area>
     <as-split-area size="60">
-      <canvas></canvas>
+      <div class="workspace-pane">
+        <canvas></canvas>
+      </div>
     </as-split-area>
     <as-split-area size="20">
-      <as-split direction="vertical">
-        <as-split-area size="40">
-          <p>
+      <as-split direction="vertical" [gutterSize]="8">
+        <as-split-area size="34">
+          <div class="workspace-pane">
+            <p class="placeholder-panel">
             Solutions AG Grid
-          </p>
+            </p>
+          </div>
         </as-split-area>
-        <as-split-area size="40">
-          <p>
+        <as-split-area size="33">
+          <div class="workspace-pane">
+            <p class="placeholder-panel">
             Solutions Statistics
-          </p>
+            </p>
+          </div>
         </as-split-area>
-        <as-split-area size="40">
-          <p>
+        <as-split-area size="33">
+          <div class="workspace-pane">
+            <p class="placeholder-panel">
             Cuts
-          </p>
+            </p>
+          </div>
         </as-split-area>
       </as-split>
     </as-split-area>

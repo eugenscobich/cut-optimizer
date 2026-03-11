@@ -1,0 +1,26 @@
+<section class="parts-panel">
+  <header class="parts-toolbar">
+    <div>
+      <h2>Parts</h2>
+      <p>{{ parts().length }} parts loaded</p>
+    </div>
+
+    <button type="button" class="primary-button" (click)="addPart()">Add part</button>
+  </header>
+
+  <ag-grid-angular
+    class="parts-grid"
+    [theme]="gridTheme"
+    [rowData]="parts()"
+    [columnDefs]="columnDefs"
+    [defaultColDef]="defaultColDef"
+    [getRowId]="getRowId"
+    [animateRows]="true"
+    [stopEditingWhenCellsLoseFocus]="true"
+    (gridReady)="onGridReady($event)"
+    (rowClicked)="selectPart($event.data?.id ?? null)"
+    (cellValueChanged)="onCellValueChanged($event)"
+  />
+
+</section>
+

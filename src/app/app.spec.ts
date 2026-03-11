@@ -16,9 +16,11 @@ describe('App', () => {
 
   it('should render the menubar and workspace shell', async () => {
     const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('app-menubar')).not.toBeNull();
+    expect(compiled.querySelector('app-parts-management')).not.toBeNull();
     expect(compiled.querySelector('canvas')).not.toBeNull();
   });
 });

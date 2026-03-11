@@ -1,0 +1,64 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #f3f5f7;
+}
+
+.container {
+  flex: 1;
+  min-height: 0;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+
+.container > as-split {
+  height: 100%;
+}
+
+.workspace-pane {
+  height: 100%;
+  min-height: 0;
+}
+
+.placeholder-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: 0.75rem;
+  color: #5f6b7a;
+  text-align: center;
+  background: #ffffff;
+  border: 1px dashed #c7d1db;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+	linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(241, 245, 249, 0.98)),
+	repeating-linear-gradient(
+	  90deg,
+	  rgba(148, 163, 184, 0.12) 0,
+	  rgba(148, 163, 184, 0.12) 1px,
+	  transparent 1px,
+	  transparent 24px
+	),
+	repeating-linear-gradient(
+	  0deg,
+	  rgba(148, 163, 184, 0.12) 0,
+	  rgba(148, 163, 184, 0.12) 1px,
+	  transparent 1px,
+	  transparent 24px
+	);
+  border: 1px solid #d9e0e7;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
