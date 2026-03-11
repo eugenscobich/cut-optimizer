@@ -16,6 +16,7 @@ import {
   CanvasTexture,
   Color,
   DirectionalLight,
+  GridHelper,
   Group,
   Mesh,
   MeshPhysicalMaterial,
@@ -61,6 +62,9 @@ const ROW_GAP = 0.3;
 const TARGET_COLUMN_COUNT = 3;
 const STATUS_PREFIX = '3D viewport';
 const COLOR_PALETTE = ['#2563eb', '#0f766e', '#9333ea', '#c2410c', '#be123c', '#047857'];
+const GRID_CELL_SIZE = 0.25;
+const GRID_PADDING = 0.5;
+const GRID_OFFSET = -0.001;
 
 @Component({
   selector: 'app-stock-viewport',
@@ -94,6 +98,7 @@ export class StockViewportComponent implements AfterViewInit {
   private camera?: PerspectiveCamera;
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
+  private gridHelper?: GridHelper;
   private stockGroup?: Group;
   private resizeObserver?: ResizeObserver;
   private openCascade: OpenCascadeInstance | null = null;
@@ -195,6 +200,7 @@ export class StockViewportComponent implements AfterViewInit {
       const camera = new PerspectiveCamera(45, 1, 0.01, 200);
       const controls = new OrbitControls(camera, canvas);
       const stockGroup = new Group();
+      const gridHelper = this.createGridHelper(2);
 
       scene.background = new Color('#eef3f8');
       scene.add(new AmbientLight('#ffffff', 1.75));
@@ -207,6 +213,7 @@ export class StockViewportComponent implements AfterViewInit {
       fillLight.position.set(-6, 5, -4);
       scene.add(fillLight);
 
+      scene.add(gridHelper);
       scene.add(stockGroup);
 
       camera.position.set(2.6, 1.8, 2.4);
@@ -228,6 +235,7 @@ export class StockViewportComponent implements AfterViewInit {
       this.camera = camera;
       this.renderer = renderer;
       this.controls = controls;
+      this.gridHelper = gridHelper;
       this.stockGroup = stockGroup;
 
       this.applyControlsMode();
@@ -270,6 +278,7 @@ export class StockViewportComponent implements AfterViewInit {
     this.renderedStockCount.set(stocks.length);
 
     if (stocks.length === 0) {
+      this.updateGridHelper();
       this.viewportStatus.set(`${STATUS_PREFIX}: no enabled stock sheets to display.`);
       return;
     }
@@ -287,17 +296,18 @@ export class StockViewportComponent implements AfterViewInit {
 
       mesh.position.set(
         previousColumnWidth + length / 2 + columnIndex * COLUMN_GAP,
-        thickness / 2,
-        previousRowDepth + width / 2 + rowIndex * ROW_GAP
+        previousRowDepth + width / 2 + rowIndex * ROW_GAP,
+        thickness / 2
       );
 
       if (stock.ignoreDirection) {
-        mesh.rotation.y = Math.PI / 2;
+        mesh.rotation.z = Math.PI / 2;
       }
 
       this.stockGroup?.add(mesh);
     });
 
+    this.updateGridHelper(new Box3().setFromObject(this.stockGroup));
     this.fitCameraToScene();
 
     const pluralSuffix = stocks.length === 1 ? '' : 's';
@@ -355,7 +365,7 @@ export class StockViewportComponent implements AfterViewInit {
     width: number,
     thickness: number
   ): Mesh {
-    const geometry = new BoxGeometry(length, thickness, width);
+    const geometry = new BoxGeometry(length, width, thickness);
     const material = new MeshPhysicalMaterial({
       color: COLOR_PALETTE[(stock.stockNumber - 1) % COLOR_PALETTE.length],
       roughness: 0.52,
@@ -467,7 +477,7 @@ export class StockViewportComponent implements AfterViewInit {
 
     if (contentBounds.isEmpty()) {
       this.applyControlsMode();
-      this.controls.target.set(0, 0.1, 0);
+      this.controls.target.set(0, 0, 0);
       this.controls.update();
       return;
     }
@@ -497,21 +507,71 @@ export class StockViewportComponent implements AfterViewInit {
 
     const isPlanView = this.viewMode() === '2d';
 
-    this.camera.up.set(0, isPlanView ? 0 : 1, isPlanView ? -1 : 0);
+    this.camera.up.set(0, 1, 0);
     this.controls.enableRotate = !isPlanView;
     this.controls.enablePan = true;
     this.controls.enableZoom = true;
     this.controls.screenSpacePanning = isPlanView;
-    this.controls.minPolarAngle = isPlanView ? 0 : 0;
-    this.controls.maxPolarAngle = isPlanView ? 0 : Math.PI;
+    this.controls.minPolarAngle = isPlanView ? Math.PI / 2 : 0;
+    this.controls.maxPolarAngle = isPlanView ? Math.PI / 2 : Math.PI;
+    this.controls.minAzimuthAngle = isPlanView ? 0 : -Infinity;
+    this.controls.maxAzimuthAngle = isPlanView ? 0 : Infinity;
   }
 
   private getViewModeCameraPosition(center: Vector3, distance: number): Vector3 {
     if (this.viewMode() === '2d') {
-      return center.clone().add(new Vector3(0, distance, 0));
+      return center.clone().add(new Vector3(0, 0, distance));
     }
 
     return center.clone().add(new Vector3(1, 0.65, 1).normalize().multiplyScalar(distance));
+  }
+
+  private createGridHelper(size: number): GridHelper {
+    const snappedSize = Math.max(1, Math.ceil(size / GRID_CELL_SIZE) * GRID_CELL_SIZE);
+    const divisions = Math.max(4, Math.round(snappedSize / GRID_CELL_SIZE));
+    const gridHelper = new GridHelper(snappedSize, divisions, '#94a3b8', '#cbd5e1');
+
+    gridHelper.rotation.x = Math.PI / 2;
+    gridHelper.position.z = GRID_OFFSET;
+    gridHelper.renderOrder = -1;
+
+    if (Array.isArray(gridHelper.material)) {
+      gridHelper.material.forEach((material) => {
+        material.transparent = true;
+        material.opacity = 0.5;
+      });
+    } else {
+      gridHelper.material.transparent = true;
+      gridHelper.material.opacity = 0.5;
+    }
+
+    return gridHelper;
+  }
+
+  private updateGridHelper(bounds?: Box3): void {
+    if (!this.scene) {
+      return;
+    }
+
+    let nextGridSize = 2;
+    let nextGridCenter = new Vector3(0, 0, GRID_OFFSET);
+
+    if (bounds && !bounds.isEmpty()) {
+      nextGridSize = Math.max(bounds.getSize(new Vector3()).x, bounds.getSize(new Vector3()).y) + GRID_PADDING * 2;
+      nextGridCenter = bounds.getCenter(new Vector3());
+    }
+
+    const nextGridHelper = this.createGridHelper(nextGridSize);
+
+    nextGridHelper.position.set(nextGridCenter.x, nextGridCenter.y, GRID_OFFSET);
+
+    if (this.gridHelper) {
+      this.scene.remove(this.gridHelper);
+      this.disposeGridHelper(this.gridHelper);
+    }
+
+    this.gridHelper = nextGridHelper;
+    this.scene.add(nextGridHelper);
   }
 
   private handleResize(width: number, height: number): void {
@@ -603,13 +663,28 @@ export class StockViewportComponent implements AfterViewInit {
     this.animationFrameActive = false;
     this.resizeObserver?.disconnect();
     this.clearStockGroup();
+    if (this.gridHelper) {
+      this.disposeGridHelper(this.gridHelper);
+    }
     this.controls?.dispose();
     this.renderer?.setAnimationLoop(null);
     this.renderer?.dispose();
     this.scene = undefined;
     this.camera = undefined;
     this.controls = undefined;
+    this.gridHelper = undefined;
     this.stockGroup = undefined;
+  }
+
+  private disposeGridHelper(gridHelper: GridHelper): void {
+    gridHelper.geometry.dispose();
+
+    if (Array.isArray(gridHelper.material)) {
+      gridHelper.material.forEach((material) => material.dispose());
+      return;
+    }
+
+    gridHelper.material.dispose();
   }
 
   private disposeOpenCascadeResource(resource: OpenCascadeResource | null): void {
