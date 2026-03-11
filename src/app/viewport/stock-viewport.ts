@@ -53,6 +53,7 @@ interface OpenCascadeShapeHandle extends OpenCascadeResource {
 }
 
 type OpenCascadeConstructor = new (...args: number[]) => OpenCascadeShapeHandle;
+type ViewMode = '3d' | '2d';
 
 const MILLIMETERS_TO_SCENE_UNITS = 0.001;
 const COLUMN_GAP = 0.22;
@@ -76,7 +77,13 @@ export class StockViewportComponent implements AfterViewInit {
 
   readonly viewportStatus = signal(`${STATUS_PREFIX}: preparing renderer…`);
   readonly openCascadeStatus = signal('OpenCascade: loading…');
+  readonly viewMode = signal<ViewMode>('3d');
   readonly renderedStockCount = signal(0);
+  readonly interactionHint = computed(() =>
+    this.viewMode() === '2d'
+      ? '2D plan locked · Drag or right-drag to pan · Wheel to zoom'
+      : 'Drag to rotate · Shift/right drag to pan · Wheel to zoom'
+  );
   readonly renderedStocks = computed<StockViewportItem[]>(() => {
     const selectedStockId = this.stocksStore.selectedStockId();
 
@@ -103,6 +110,17 @@ export class StockViewportComponent implements AfterViewInit {
 
       this.rebuildStocks(stocks);
     });
+  }
+
+  setViewMode(mode: ViewMode): void {
+    if (this.viewMode() === mode) {
+      return;
+    }
+
+    this.viewMode.set(mode);
+    this.applyControlsMode();
+    this.controls?.update();
+    this.fitCameraToScene();
   }
 
   async ngAfterViewInit(): Promise<void> {
@@ -212,6 +230,7 @@ export class StockViewportComponent implements AfterViewInit {
       this.controls = controls;
       this.stockGroup = stockGroup;
 
+      this.applyControlsMode();
       this.handleResize(host.clientWidth, host.clientHeight);
       this.setupResizeObserver(host);
       this.destroyRef.onDestroy(() => this.disposeScene());
@@ -447,6 +466,7 @@ export class StockViewportComponent implements AfterViewInit {
     const contentBounds = new Box3().setFromObject(this.stockGroup);
 
     if (contentBounds.isEmpty()) {
+      this.applyControlsMode();
       this.controls.target.set(0, 0.1, 0);
       this.controls.update();
       return;
@@ -459,15 +479,39 @@ export class StockViewportComponent implements AfterViewInit {
     const fitHeightDistance = maxDimension / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
     const fitWidthDistance = maxDimension / (2 * Math.tan(horizontalFov / 2));
     const distance = 1.45 * Math.max(fitHeightDistance, fitWidthDistance);
-    const direction = new Vector3(1, 0.65, 1).normalize();
 
     this.camera.near = Math.max(0.01, distance / 100);
     this.camera.far = Math.max(200, distance * 40);
-    this.camera.position.copy(center.clone().add(direction.multiplyScalar(distance)));
+    this.camera.position.copy(this.getViewModeCameraPosition(center, distance));
     this.camera.updateProjectionMatrix();
 
     this.controls.target.copy(center);
+    this.applyControlsMode();
     this.controls.update();
+  }
+
+  private applyControlsMode(): void {
+    if (!this.camera || !this.controls) {
+      return;
+    }
+
+    const isPlanView = this.viewMode() === '2d';
+
+    this.camera.up.set(0, isPlanView ? 0 : 1, isPlanView ? -1 : 0);
+    this.controls.enableRotate = !isPlanView;
+    this.controls.enablePan = true;
+    this.controls.enableZoom = true;
+    this.controls.screenSpacePanning = isPlanView;
+    this.controls.minPolarAngle = isPlanView ? 0 : 0;
+    this.controls.maxPolarAngle = isPlanView ? 0 : Math.PI;
+  }
+
+  private getViewModeCameraPosition(center: Vector3, distance: number): Vector3 {
+    if (this.viewMode() === '2d') {
+      return center.clone().add(new Vector3(0, distance, 0));
+    }
+
+    return center.clone().add(new Vector3(1, 0.65, 1).normalize().multiplyScalar(distance));
   }
 
   private handleResize(width: number, height: number): void {

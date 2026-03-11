@@ -2,9 +2,29 @@
   <canvas #canvas aria-label="Stock 3D viewport"></canvas>
 
   <div class="viewport-overlay">
+    <div class="view-mode-toggle" role="group" aria-label="Viewport mode">
+      <button
+        type="button"
+        class="view-mode-button"
+        [class.view-mode-button--active]="viewMode() === '3d'"
+        [attr.aria-pressed]="viewMode() === '3d'"
+        (click)="setViewMode('3d')"
+      >
+        3D
+      </button>
+      <button
+        type="button"
+        class="view-mode-button"
+        [class.view-mode-button--active]="viewMode() === '2d'"
+        [attr.aria-pressed]="viewMode() === '2d'"
+        (click)="setViewMode('2d')"
+      >
+        2D
+      </button>
+    </div>
     <p class="status-chip">{{ viewportStatus() }}</p>
     <p class="status-chip status-chip--secondary">{{ openCascadeStatus() }}</p>
-    <p class="status-chip status-chip--hint">Drag to rotate · Shift/right drag to pan · Wheel to zoom</p>
+    <p class="status-chip status-chip--hint">{{ interactionHint() }}</p>
   </div>
 
   @if (renderedStockCount() === 0) {

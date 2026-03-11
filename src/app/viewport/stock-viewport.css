@@ -38,6 +38,50 @@ canvas:active {
   pointer-events: none;
 }
 
+.view-mode-toggle {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  pointer-events: auto;
+}
+
+.view-mode-button {
+  min-width: 3rem;
+  padding: 0.35rem 0.75rem;
+  color: #334155;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.view-mode-button:hover {
+  background: rgba(226, 232, 240, 0.95);
+}
+
+.view-mode-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.view-mode-button--active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
+}
+
 .status-chip {
   margin: 0;
   padding: 0.45rem 0.7rem;
