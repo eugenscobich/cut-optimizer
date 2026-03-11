@@ -1,11 +1,56 @@
 <section class="parts-panel">
   <header class="parts-toolbar">
-    <div>
+    <div class="parts-toolbar-summary">
       <h2>Parts</h2>
       <p>{{ parts().length }} parts loaded</p>
     </div>
 
-    <button type="button" class="primary-button" (click)="addPart()">Add part</button>
+    <input
+      #partsCsvInput
+      type="file"
+      accept=".csv,text/csv"
+      class="visually-hidden"
+      (change)="onImportFileSelected($event)"
+      hidden="hidden"
+    />
+    <div ngToolbar aria-label="Part Tools">
+      <div class="group">
+        <button
+          ngToolbarWidget
+          value="add"
+          type="button"
+          aria-label="Add Part"
+          class="material-symbols-outlined"
+          translate="no"
+          (click)="addPart()"
+        >
+          add
+        </button>
+        <button
+          ngToolbarWidget
+          value="export"
+          type="button"
+          aria-label="Download Csv"
+          class="material-symbols-outlined"
+          translate="no"
+          (click)="exportParts()"
+        >
+          Download
+        </button>
+        <button
+          ngToolbarWidget
+          value="upload"
+          type="button"
+          aria-label="Uplad Csv"
+          class="material-symbols-outlined"
+          translate="no"
+          (click)="openImportPicker(partsCsvInput)"
+
+        >
+          Upload
+        </button>
+      </div>
+    </div>
   </header>
 
   <ag-grid-angular

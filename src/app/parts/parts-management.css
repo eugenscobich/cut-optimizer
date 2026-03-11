@@ -142,15 +142,39 @@
   font-size: 0.9rem;
 }
 
-@media (max-width: 960px) {
-  .part-details__grid {
-    grid-template-columns: 1fr;
-  }
-
-  .parts-toolbar,
-  .part-details__header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
+[ngToolbar] {
+  gap: 1.5rem;
+  display: flex;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--septenary-contrast);
+}
+.group {
+  gap: 0.5rem;
+  display: flex;
 }
 
+[ngToolbarWidget] {
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 1.25rem;
+  background-color: transparent;
+  color: var(--primary-contrast);
+}
+[ngToolbarWidget]:hover {
+  background-color: color-mix(in srgb, var(--primary-contrast) 10%, transparent);
+}
+[ngToolbarWidget]:active {
+  background-color: color-mix(in srgb, var(--primary-contrast) 15%, transparent);
+}
+[ngToolbarWidget]:focus {
+  outline-offset: -1px;
+  outline: 1px solid color-mix(in srgb, var(--hot-pink) 60%, transparent);
+}
+[ngToolbarWidget][aria-pressed="true"],
+[ngToolbarWidget][aria-checked="true"] {
+  color: color-mix(in srgb, var(--hot-pink) 80%, var(--primary-contrast));
+  background-color: color-mix(in srgb, var(--hot-pink) 10%, transparent);
+}
