@@ -21,6 +21,7 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('app-menubar')).not.toBeNull();
     expect(compiled.querySelector('app-parts-management')).not.toBeNull();
+    expect(compiled.querySelector('app-stocks-management')).not.toBeNull();
     expect(compiled.querySelector('canvas')).not.toBeNull();
   });
 });

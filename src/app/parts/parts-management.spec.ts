@@ -42,12 +42,12 @@ describe('PartsManagementComponent', () => {
     const widgets = toolbar?.querySelectorAll('button');
 
     expect(toolbar).not.toBeNull();
-    expect(toolbar?.getAttribute('aria-label')).toBe('Part actions');
+    expect(toolbar?.getAttribute('aria-label')).toBe('Part Tools');
     expect(widgets?.length).toBe(3);
-    expect(Array.from(widgets ?? []).map((button) => button.textContent?.trim())).toEqual([
-      'Import CSV',
-      'Export CSV',
-      'Add part'
+    expect(Array.from(widgets ?? []).map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Add Part',
+      'Download CSV',
+      'Upload CSV'
     ]);
   });
 
@@ -139,10 +139,6 @@ describe('PartsManagementComponent', () => {
       material: ''
     });
     expect(component.selectedPart()?.id).toBe(component.parts()[0]?.id ?? null);
-    expect(component.feedback()).toEqual({
-      tone: 'success',
-      text: 'Imported 2 parts from CSV.'
-    });
   });
 
   it('should support quoted CSV values and preserve explicit part numbers', () => {

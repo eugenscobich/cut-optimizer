@@ -1,28 +1,28 @@
-<section class="parts-panel">
-  <header class="parts-toolbar">
-    <div class="parts-toolbar-summary">
-      <h2>Parts</h2>
-      <p>{{ parts().length }} parts loaded</p>
+<section class="stocks-panel">
+  <header class="stocks-toolbar">
+    <div class="stocks-toolbar-summary">
+      <h2>Stocks</h2>
+      <p>{{ stocks().length }} stock sheets loaded</p>
     </div>
 
     <input
-      #partsCsvInput
+      #stocksCsvInput
       type="file"
       accept=".csv,text/csv"
       class="visually-hidden"
       (change)="onImportFileSelected($event)"
       hidden="hidden"
     />
-    <div ngToolbar aria-label="Part Tools">
+    <div ngToolbar aria-label="Stock Tools">
       <div class="group">
         <button
           ngToolbarWidget
           value="add"
           type="button"
-          aria-label="Add Part"
+          aria-label="Add Stock"
           class="material-symbols-outlined"
           translate="no"
-          (click)="addPart()"
+          (click)="addStock()"
         >
           add
         </button>
@@ -33,7 +33,7 @@
           aria-label="Download CSV"
           class="material-symbols-outlined"
           translate="no"
-          (click)="exportParts()"
+          (click)="exportStocks()"
         >
           Download
         </button>
@@ -44,8 +44,7 @@
           aria-label="Upload CSV"
           class="material-symbols-outlined"
           translate="no"
-          (click)="openImportPicker(partsCsvInput)"
-
+          (click)="openImportPicker(stocksCsvInput)"
         >
           Upload
         </button>
@@ -54,18 +53,17 @@
   </header>
 
   <ag-grid-angular
-    class="parts-grid"
+    class="stocks-grid"
     [theme]="gridTheme"
-    [rowData]="parts()"
+    [rowData]="stocks()"
     [columnDefs]="columnDefs"
     [defaultColDef]="defaultColDef"
     [getRowId]="getRowId"
     [animateRows]="true"
     [stopEditingWhenCellsLoseFocus]="true"
     (gridReady)="onGridReady($event)"
-    (rowClicked)="selectPart($event.data?.id ?? null)"
+    (rowClicked)="selectStock($event.data?.id ?? null)"
     (cellValueChanged)="onCellValueChanged($event)"
   />
-
 </section>
 
