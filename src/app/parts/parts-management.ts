@@ -211,7 +211,7 @@ export class PartsManagementComponent {
       field: 'number',
       headerName: '#',
       maxWidth: 60,
-      minWidth: 40,
+      minWidth: 60,
       cellDataType: 'number'
     },
     {
