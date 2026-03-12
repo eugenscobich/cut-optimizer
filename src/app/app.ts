@@ -3,7 +3,7 @@ import { SplitAreaComponent, SplitComponent } from 'angular-split';
 import { AppMenubarComponent } from './menubar/app-menubar';
 import { PartsManagementComponent } from './parts/parts-management';
 import { StocksManagementComponent } from './stocks/stocks-management';
-import { StockViewportComponent } from './viewport/stock-viewport';
+import { ViewportComponent } from './viewport/viewport';
 
 @Component({
   selector: 'app-root',
@@ -12,7 +12,7 @@ import { StockViewportComponent } from './viewport/stock-viewport';
     AppMenubarComponent,
     PartsManagementComponent,
     StocksManagementComponent,
-    StockViewportComponent,
+    ViewportComponent,
     SplitAreaComponent,
     SplitComponent
   ],

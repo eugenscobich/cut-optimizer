@@ -90,12 +90,12 @@ const GRID_PADDING = 0.5;
 const GRID_OFFSET = -0.001;
 
 @Component({
-  selector: 'app-stock-viewport',
+  selector: 'app-viewport',
   standalone: true,
-  templateUrl: './stock-viewport.html',
-  styleUrl: './stock-viewport.css'
+  templateUrl: './viewport.html',
+  styleUrl: './viewport.css'
 })
-export class StockViewportComponent implements AfterViewInit {
+export class ViewportComponent implements AfterViewInit {
   private readonly hostRef = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private readonly destroyRef = inject(DestroyRef);

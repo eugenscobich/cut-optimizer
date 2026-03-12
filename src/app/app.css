@@ -22,7 +22,7 @@
   min-height: 0;
 }
 
-.workspace-pane app-stock-viewport {
+.workspace-pane app-viewport {
   display: block;
   height: 100%;
   min-height: 0;
