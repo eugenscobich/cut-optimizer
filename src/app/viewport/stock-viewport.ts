@@ -11,12 +11,14 @@ import {
 } from '@angular/core';
 import {
   AmbientLight,
+  BufferGeometry,
   Box3,
   BoxGeometry,
   Camera,
   CanvasTexture,
   Color,
   DirectionalLight,
+  Float32BufferAttribute,
   GridHelper,
   Group,
   Mesh,
@@ -51,11 +53,28 @@ interface OpenCascadeResource {
   delete?: () => void;
 }
 
-interface OpenCascadeShapeHandle extends OpenCascadeResource {
-  Shape?: () => OpenCascadeResource;
+interface OpenCascadeBoxMakerHandle extends OpenCascadeResource {
+  Shape?: () => OpenCascadeResource | null;
 }
 
-type OpenCascadeConstructor = new (...args: number[]) => OpenCascadeShapeHandle;
+interface StockGeometryBuildResult {
+  readonly geometry: BufferGeometry;
+  readonly source: 'opencascade' | 'analytical';
+}
+
+interface StockMeshBuildResult {
+  readonly mesh: Mesh;
+  readonly geometrySource: StockGeometryBuildResult['source'];
+}
+
+interface OpenCascadeTriangleIndices {
+  readonly first: number;
+  readonly second: number;
+  readonly third: number;
+}
+
+type OpenCascadeBoxConstructor = new (...args: number[]) => OpenCascadeBoxMakerHandle;
+type OpenCascadeGenericConstructor = new (...args: unknown[]) => OpenCascadeResource;
 type ViewMode = '3d' | '2d';
 type ProjectionMode = 'perspective' | 'orthographic';
 type SupportedCamera = PerspectiveCamera | OrthographicCamera;
@@ -109,7 +128,7 @@ export class StockViewportComponent implements AfterViewInit {
   private stockGroup?: Group;
   private resizeObserver?: ResizeObserver;
   private openCascade: OpenCascadeInstance | null = null;
-  private openCascadeBoxConstructor: OpenCascadeConstructor | null = null;
+  private openCascadeBoxConstructor: OpenCascadeBoxConstructor | null = null;
   private orthographicHalfHeight = 1;
   private animationFrameActive = false;
 
@@ -288,7 +307,7 @@ export class StockViewportComponent implements AfterViewInit {
       );
       this.openCascadeStatus.set(
         this.openCascadeBoxConstructor
-          ? 'OpenCascade: loaded. Building stock solids.'
+          ? 'OpenCascade: loaded. Building stock solids and computed meshes.'
           : 'OpenCascade: loaded, but box bindings were not found. Using analytical box geometry.'
       );
       return;
@@ -312,6 +331,9 @@ export class StockViewportComponent implements AfterViewInit {
     }
 
     const columnCount = Math.min(TARGET_COLUMN_COUNT, Math.max(1, stocks.length));
+    let openCascadeMeshCount = 0;
+    let analyticalMeshCount = 0;
+
     stocks.forEach((stock, index) => {
       const columnIndex = index % columnCount;
       const rowIndex = Math.floor(index / columnCount);
@@ -320,7 +342,13 @@ export class StockViewportComponent implements AfterViewInit {
       const thickness = stock.thickness * MILLIMETERS_TO_SCENE_UNITS;
       const previousColumnWidth = this.getAccumulatedColumnWidth(stocks, columnIndex, columnCount);
       const previousRowDepth = this.getAccumulatedRowDepth(stocks, rowIndex, columnCount);
-      const mesh = this.createStockMesh(stock, length, width, thickness);
+      const { mesh, geometrySource } = this.createStockMesh(stock, length, width, thickness);
+
+      if (geometrySource === 'opencascade') {
+        openCascadeMeshCount += 1;
+      } else {
+        analyticalMeshCount += 1;
+      }
 
       mesh.position.set(
         previousColumnWidth + length / 2 + columnIndex * COLUMN_GAP,
@@ -340,9 +368,7 @@ export class StockViewportComponent implements AfterViewInit {
 
     const pluralSuffix = stocks.length === 1 ? '' : 's';
     this.viewportStatus.set(`${STATUS_PREFIX}: showing ${stocks.length} stock solid${pluralSuffix}.`);
-    if (this.openCascade) {
-      this.openCascadeStatus.set('OpenCascade: loaded. Stock solids are synchronised.');
-    }
+    this.updateOpenCascadeRenderStatus(openCascadeMeshCount, analyticalMeshCount);
   }
 
   private getAccumulatedColumnWidth(
@@ -392,8 +418,8 @@ export class StockViewportComponent implements AfterViewInit {
     length: number,
     width: number,
     thickness: number
-  ): Mesh {
-    const geometry = new BoxGeometry(length, width, thickness);
+  ): StockMeshBuildResult {
+    const geometryResult = this.buildStockGeometry(stock, length, width, thickness);
     const material = new MeshPhysicalMaterial({
       color: COLOR_PALETTE[(stock.stockNumber - 1) % COLOR_PALETTE.length],
       roughness: 0.52,
@@ -409,19 +435,269 @@ export class StockViewportComponent implements AfterViewInit {
       material.emissiveIntensity = 0.35;
     }
 
-    const mesh = new Mesh(geometry, material);
-    const labelTexture = this.createLabelTexture(`${stock.label} · #${stock.stockNumber}.${stock.copyIndex + 1}`);
-    const ocSolid = this.createOpenCascadeSolid(stock);
+    const mesh = new Mesh(geometryResult.geometry, material);
+    const labelTexture = this.createLabelTexture(
+      `${stock.label} · #${stock.stockNumber}.${stock.copyIndex + 1}`
+    );
 
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.userData = {
       labelTexture,
-      ocSolid,
+      geometrySource: geometryResult.source,
       stockId: stock.stockId
     };
 
-    return mesh;
+    return {
+      mesh,
+      geometrySource: geometryResult.source
+    };
+  }
+
+  private buildStockGeometry(
+    stock: StockViewportItem,
+    length: number,
+    width: number,
+    thickness: number
+  ): StockGeometryBuildResult {
+    const openCascadeGeometry = this.createOpenCascadeGeometry(stock);
+
+    if (openCascadeGeometry) {
+      return {
+        geometry: openCascadeGeometry,
+        source: 'opencascade'
+      };
+    }
+
+    return {
+      geometry: this.createFallbackBoxGeometry(length, width, thickness),
+      source: 'analytical'
+    };
+  }
+
+  private createFallbackBoxGeometry(
+    length: number,
+    width: number,
+    thickness: number
+  ): BoxGeometry {
+    return new BoxGeometry(length, width, thickness);
+  }
+
+  private createOpenCascadeGeometry(stock: StockViewportItem): BufferGeometry | null {
+    if (!this.openCascade || !this.openCascadeBoxConstructor) {
+      return null;
+    }
+
+    let maker: OpenCascadeBoxMakerHandle | null = null;
+    let shape: OpenCascadeResource | null = null;
+
+    try {
+      maker = new this.openCascadeBoxConstructor(stock.length, stock.width, stock.thickness);
+      shape = maker.Shape?.() ?? null;
+
+      if (!shape) {
+        return null;
+      }
+
+      return this.createThreeGeometryFromOpenCascadeShape(
+        this.openCascade as Record<string, unknown>,
+        shape
+      );
+    } catch {
+      return null;
+    } finally {
+      this.disposeOpenCascadeResource(shape);
+      this.disposeOpenCascadeResource(maker);
+    }
+  }
+
+  private createThreeGeometryFromOpenCascadeShape(
+    openCascadeRecord: Record<string, unknown>,
+    shape: OpenCascadeResource
+  ): BufferGeometry | null {
+    const mesherConstructor = this.resolveOpenCascadeConstructor<OpenCascadeGenericConstructor>(
+      openCascadeRecord,
+      'BRepMesh_IncrementalMesh'
+    );
+    const explorerConstructor = this.resolveOpenCascadeConstructor<OpenCascadeGenericConstructor>(
+      openCascadeRecord,
+      'TopExp_Explorer'
+    );
+    const locationConstructor = this.resolveOpenCascadeConstructor<OpenCascadeGenericConstructor>(
+      openCascadeRecord,
+      'TopLoc_Location'
+    );
+
+    if (!mesherConstructor || !explorerConstructor || !locationConstructor) {
+      return null;
+    }
+
+    const mesher = this.instantiateOpenCascadeResource(mesherConstructor, [
+      [shape, 0.5, false, 0.5, true],
+      [shape, 0.5, false, 0.5],
+      [shape, 0.5, false],
+      [shape, 0.5],
+      [shape]
+    ]);
+
+    if (!mesher) {
+      return null;
+    }
+
+    let explorer: OpenCascadeResource | null = null;
+
+    try {
+      this.callOpenCascadeMethod(
+        this.asOpenCascadeRecord(mesher),
+        ['Perform'],
+        []
+      );
+
+      const faceEnum = this.resolveOpenCascadeFaceEnum(openCascadeRecord);
+      const explorerArguments =
+        faceEnum === null ? [[shape]] : [[shape, faceEnum], [shape, faceEnum, false], [shape, faceEnum, 0]];
+
+      explorer = this.instantiateOpenCascadeResource(explorerConstructor, explorerArguments);
+
+      if (!explorer) {
+        return null;
+      }
+
+      const positions: number[] = [];
+      const indices: number[] = [];
+
+      while (this.readOpenCascadeBoolean(this.asOpenCascadeRecord(explorer), ['More'])) {
+        const currentFace = this.callOpenCascadeMethod(
+          this.asOpenCascadeRecord(explorer),
+          ['Current'],
+          []
+        ) as OpenCascadeResource | null;
+
+        const face = this.castOpenCascadeFace(openCascadeRecord, currentFace);
+
+        if (face) {
+          this.appendOpenCascadeFaceGeometry(openCascadeRecord, face, locationConstructor, positions, indices);
+        }
+
+        if (face && face !== currentFace) {
+          this.disposeOpenCascadeResource(face);
+        }
+
+        this.callOpenCascadeMethod(this.asOpenCascadeRecord(explorer), ['Next'], []);
+      }
+
+      if (positions.length === 0 || indices.length === 0) {
+        return null;
+      }
+
+      const geometry = new BufferGeometry();
+
+      geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+
+      return geometry;
+    } finally {
+      this.disposeOpenCascadeResource(explorer);
+      this.disposeOpenCascadeResource(mesher);
+    }
+  }
+
+  private appendOpenCascadeFaceGeometry(
+    openCascadeRecord: Record<string, unknown>,
+    face: OpenCascadeResource,
+    locationConstructor: OpenCascadeGenericConstructor,
+    positions: number[],
+    indices: number[]
+  ): void {
+    let location: OpenCascadeResource | null = null;
+    let triangulation: OpenCascadeResource | null = null;
+    let transform: OpenCascadeResource | null = null;
+
+    try {
+      location = new locationConstructor();
+      triangulation = this.readOpenCascadeTriangulation(openCascadeRecord, face, location);
+
+      if (!triangulation) {
+        return;
+      }
+
+      const triangulationRecord = this.asOpenCascadeRecord(triangulation);
+      const nodeCount = this.readOpenCascadeNumber(triangulationRecord, ['NbNodes']);
+      const triangleCount = this.readOpenCascadeNumber(triangulationRecord, ['NbTriangles']);
+
+      if (!nodeCount || !triangleCount) {
+        return;
+      }
+
+      transform = this.callOpenCascadeMethod(
+        this.asOpenCascadeRecord(location),
+        ['Transformation'],
+        []
+      ) as OpenCascadeResource | null;
+
+      const vertexOffset = positions.length / 3;
+
+      for (let nodeIndex = 1; nodeIndex <= nodeCount; nodeIndex += 1) {
+        const node = this.callOpenCascadeMethod(triangulationRecord, ['Node'], [nodeIndex]) as
+          | OpenCascadeResource
+          | null;
+        const transformedNode = node
+          ? ((transform
+              ? this.callOpenCascadeMethod(this.asOpenCascadeRecord(node), ['Transformed'], [transform])
+              : null) as OpenCascadeResource | null)
+          : null;
+        const effectiveNode = transformedNode ?? node;
+        const effectiveNodeRecord = this.asOpenCascadeRecord(effectiveNode);
+
+        const x = this.readOpenCascadeNumber(effectiveNodeRecord, ['X']);
+        const y = this.readOpenCascadeNumber(effectiveNodeRecord, ['Y']);
+        const z = this.readOpenCascadeNumber(effectiveNodeRecord, ['Z']);
+
+        if (x !== null && y !== null && z !== null) {
+          positions.push(
+            x * MILLIMETERS_TO_SCENE_UNITS,
+            y * MILLIMETERS_TO_SCENE_UNITS,
+            z * MILLIMETERS_TO_SCENE_UNITS
+          );
+        }
+
+        if (transformedNode && transformedNode !== node) {
+          this.disposeOpenCascadeResource(transformedNode);
+        }
+
+        this.disposeOpenCascadeResource(node);
+      }
+
+      const faceIsReversed = this.isOpenCascadeFaceReversed(openCascadeRecord, face);
+
+      for (let triangleIndex = 1; triangleIndex <= triangleCount; triangleIndex += 1) {
+        const triangle = this.callOpenCascadeMethod(triangulationRecord, ['Triangle'], [triangleIndex]) as
+          | OpenCascadeResource
+          | null;
+        const triangleIndices = this.readOpenCascadeTriangleIndices(triangle);
+
+        if (triangleIndices) {
+          const firstIndex = vertexOffset + triangleIndices.first - 1;
+          const secondIndex = vertexOffset + triangleIndices.second - 1;
+          const thirdIndex = vertexOffset + triangleIndices.third - 1;
+
+          if (faceIsReversed) {
+            indices.push(firstIndex, thirdIndex, secondIndex);
+          } else {
+            indices.push(firstIndex, secondIndex, thirdIndex);
+          }
+        }
+
+        this.disposeOpenCascadeResource(triangle);
+      }
+    } finally {
+      this.disposeOpenCascadeResource(transform);
+      this.disposeOpenCascadeResource(triangulation);
+      this.disposeOpenCascadeResource(location);
+    }
   }
 
   private createLabelTexture(label: string): CanvasTexture | null {
@@ -451,49 +727,273 @@ export class StockViewportComponent implements AfterViewInit {
     return texture;
   }
 
-  private createOpenCascadeSolid(stock: StockViewportItem): OpenCascadeResource | null {
-    if (!this.openCascade || !this.openCascadeBoxConstructor) {
-      return null;
-    }
-
-    try {
-      const maker = new this.openCascadeBoxConstructor(stock.length, stock.width, stock.thickness);
-      const shape = typeof maker.Shape === 'function' ? maker.Shape() : null;
-
-      return {
-        delete: () => {
-          try {
-            shape?.delete?.();
-          } finally {
-            maker.delete?.();
-          }
-        }
-      };
-    } catch {
-      return null;
-    }
-  }
-
   private resolveOpenCascadeBoxConstructor(
     openCascadeRecord: Record<string, unknown>
-  ): OpenCascadeConstructor | null {
-    const constructorNames = [
-      'BRepPrimAPI_MakeBox_1',
-      'BRepPrimAPI_MakeBox_2',
-      'BRepPrimAPI_MakeBox_3',
-      'BRepPrimAPI_MakeBox_4',
+  ): OpenCascadeBoxConstructor | null {
+    return this.resolveOpenCascadeConstructor<OpenCascadeBoxConstructor>(
+      openCascadeRecord,
       'BRepPrimAPI_MakeBox'
-    ];
+    );
+  }
 
-    for (const constructorName of constructorNames) {
+  private resolveOpenCascadeConstructor<T extends OpenCascadeGenericConstructor | OpenCascadeBoxConstructor>(
+    openCascadeRecord: Record<string, unknown>,
+    baseName: string
+  ): T | null {
+    for (const constructorName of this.getOpenCascadeCandidateNames(baseName)) {
       const candidate = openCascadeRecord[constructorName];
 
       if (typeof candidate === 'function') {
-        return candidate as OpenCascadeConstructor;
+        return candidate as T;
       }
     }
 
     return null;
+  }
+
+  private instantiateOpenCascadeResource(
+    Constructor: OpenCascadeGenericConstructor,
+    argumentSets: readonly unknown[][]
+  ): OpenCascadeResource | null {
+    for (const argumentSet of argumentSets) {
+      try {
+        return new Constructor(...argumentSet);
+      } catch {
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  private readOpenCascadeTriangulation(
+    openCascadeRecord: Record<string, unknown>,
+    face: OpenCascadeResource,
+    location: OpenCascadeResource
+  ): OpenCascadeResource | null {
+    const brepTool = this.asOpenCascadeRecord(openCascadeRecord['BRep_Tool']);
+
+    if (!brepTool) {
+      return null;
+    }
+
+    return (this.callOpenCascadeMethod(brepTool, ['Triangulation'], [face, location]) ??
+      this.callOpenCascadeMethod(brepTool, ['Triangulation'], [face, location, 0])) as OpenCascadeResource | null;
+  }
+
+  private castOpenCascadeFace(
+    openCascadeRecord: Record<string, unknown>,
+    faceCandidate: OpenCascadeResource | null
+  ): OpenCascadeResource | null {
+    if (!faceCandidate) {
+      return null;
+    }
+
+    const topoDsNamespace = this.asOpenCascadeRecord(openCascadeRecord['TopoDS']);
+
+    if (topoDsNamespace) {
+      const castFace = this.callOpenCascadeMethod(topoDsNamespace, ['Face'], [faceCandidate]) as
+        | OpenCascadeResource
+        | null;
+
+      if (castFace) {
+        return castFace;
+      }
+    }
+
+    const faceConstructor = this.resolveOpenCascadeConstructor<OpenCascadeGenericConstructor>(
+      openCascadeRecord,
+      'TopoDS_Face'
+    );
+
+    if (faceConstructor) {
+      return this.instantiateOpenCascadeResource(faceConstructor, [[faceCandidate]]);
+    }
+
+    return faceCandidate;
+  }
+
+  private readOpenCascadeTriangleIndices(
+    triangle: OpenCascadeResource | null
+  ): OpenCascadeTriangleIndices | null {
+    const triangleRecord = this.asOpenCascadeRecord(triangle);
+
+    if (!triangleRecord) {
+      return null;
+    }
+
+    const first = this.readOpenCascadeNumber(triangleRecord, ['Value'], [1]);
+    const second = this.readOpenCascadeNumber(triangleRecord, ['Value'], [2]);
+    const third = this.readOpenCascadeNumber(triangleRecord, ['Value'], [3]);
+
+    if (first !== null && second !== null && third !== null) {
+      return { first, second, third };
+    }
+
+    const getResult = this.callOpenCascadeMethod(triangleRecord, ['Get'], []);
+
+    if (Array.isArray(getResult) && getResult.length >= 3) {
+      const [firstIndex, secondIndex, thirdIndex] = getResult;
+
+      if (
+        typeof firstIndex === 'number' &&
+        typeof secondIndex === 'number' &&
+        typeof thirdIndex === 'number'
+      ) {
+        return {
+          first: firstIndex,
+          second: secondIndex,
+          third: thirdIndex
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private resolveOpenCascadeFaceEnum(openCascadeRecord: Record<string, unknown>): number | null {
+    const directValue = openCascadeRecord['TopAbs_FACE'];
+
+    if (typeof directValue === 'number') {
+      return directValue;
+    }
+
+    const shapeEnumRecord = this.asOpenCascadeRecord(openCascadeRecord['TopAbs_ShapeEnum']);
+    const nestedValue = shapeEnumRecord?.['TopAbs_FACE'];
+
+    if (typeof nestedValue === 'number') {
+      return nestedValue;
+    }
+
+    return 4;
+  }
+
+  private isOpenCascadeFaceReversed(
+    openCascadeRecord: Record<string, unknown>,
+    face: OpenCascadeResource
+  ): boolean {
+    const orientation = this.callOpenCascadeMethod(
+      this.asOpenCascadeRecord(face),
+      ['Orientation'],
+      []
+    );
+
+    if (typeof orientation !== 'number') {
+      return false;
+    }
+
+    const directValue = openCascadeRecord['TopAbs_REVERSED'];
+
+    if (typeof directValue === 'number') {
+      return orientation === directValue;
+    }
+
+    const orientationRecord = this.asOpenCascadeRecord(openCascadeRecord['TopAbs_Orientation']);
+    const nestedValue = orientationRecord?.['TopAbs_REVERSED'];
+
+    if (typeof nestedValue === 'number') {
+      return orientation === nestedValue;
+    }
+
+    return orientation === 1;
+  }
+
+  private updateOpenCascadeRenderStatus(
+    openCascadeMeshCount: number,
+    analyticalMeshCount: number
+  ): void {
+    if (!this.openCascade) {
+      this.openCascadeStatus.set('OpenCascade: unavailable. Rendering analytical box geometry only.');
+      return;
+    }
+
+    if (!this.openCascadeBoxConstructor) {
+      this.openCascadeStatus.set(
+        'OpenCascade: loaded, but box bindings were not found. Using analytical box geometry.'
+      );
+      return;
+    }
+
+    if (openCascadeMeshCount > 0 && analyticalMeshCount === 0) {
+      const pluralSuffix = openCascadeMeshCount === 1 ? '' : 'es';
+
+      this.openCascadeStatus.set(
+        `OpenCascade: loaded. Rendering ${openCascadeMeshCount} computed mesh${pluralSuffix}.`
+      );
+      return;
+    }
+
+    if (openCascadeMeshCount > 0) {
+      const computedPluralSuffix = openCascadeMeshCount === 1 ? '' : 'es';
+      const fallbackPluralSuffix = analyticalMeshCount === 1 ? '' : 's';
+
+      this.openCascadeStatus.set(
+        `OpenCascade: loaded. Rendering ${openCascadeMeshCount} computed mesh${computedPluralSuffix}; ${analyticalMeshCount} stock solid${fallbackPluralSuffix} are using analytical box geometry.`
+      );
+      return;
+    }
+
+    this.openCascadeStatus.set(
+      'OpenCascade: loaded, but triangulation bindings were unavailable. Using analytical box geometry.'
+    );
+  }
+
+  private callOpenCascadeMethod(
+    target: Record<string, unknown> | null,
+    baseNames: readonly string[],
+    args: readonly unknown[]
+  ): unknown {
+    if (!target) {
+      return null;
+    }
+
+    for (const baseName of baseNames) {
+      for (const methodName of this.getOpenCascadeCandidateNames(baseName)) {
+        const candidate = target[methodName];
+
+        if (typeof candidate === 'function') {
+          try {
+            return Reflect.apply(candidate, target, [...args]);
+          } catch {
+            continue;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private readOpenCascadeNumber(
+    target: Record<string, unknown> | null,
+    baseNames: readonly string[],
+    args: readonly unknown[] = []
+  ): number | null {
+    const value = this.callOpenCascadeMethod(target, baseNames, args);
+
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  private readOpenCascadeBoolean(
+    target: Record<string, unknown> | null,
+    baseNames: readonly string[],
+    args: readonly unknown[] = []
+  ): boolean {
+    return this.callOpenCascadeMethod(target, baseNames, args) === true;
+  }
+
+  private getOpenCascadeCandidateNames(baseName: string): string[] {
+    const names = [baseName];
+
+    for (let overloadIndex = 1; overloadIndex <= 9; overloadIndex += 1) {
+      names.push(`${baseName}_${overloadIndex}`);
+    }
+
+    return names;
+  }
+
+  private asOpenCascadeRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
   }
 
   private fitCameraToScene(): void {
@@ -689,13 +1189,10 @@ export class StockViewportComponent implements AfterViewInit {
         }
 
         const labelTexture = child.userData['labelTexture'];
-        const ocSolid = child.userData['ocSolid'];
 
         if (labelTexture instanceof CanvasTexture) {
           labelTexture.dispose();
         }
-
-        this.disposeOpenCascadeResource(ocSolid as OpenCascadeResource | null);
       }
     }
   }
