@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import {
   AmbientLight,
+  AxesHelper,
   BufferGeometry,
   Box3,
   BoxGeometry,
@@ -21,12 +22,17 @@ import {
   Float32BufferAttribute,
   GridHelper,
   Group,
+  Material,
   Mesh,
   MeshPhysicalMaterial,
+  Object3D,
   OrthographicCamera,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   Vector2,
   Vector3,
   WebGLRenderer
@@ -63,6 +69,7 @@ const GRID_CELL_SIZE = 0.25;
 const GRID_PADDING = 0.5;
 const GRID_OFFSET = -0.001;
 const FPS_SAMPLE_INTERVAL_MS = 500;
+const ORIGIN_AXES_SIZE = 1;
 
 @Component({
   selector: 'app-viewport',
@@ -101,6 +108,7 @@ export class ViewportComponent implements AfterViewInit {
   private renderer?: WebGLRenderer;
   private controls?: OrbitControls;
   private gridHelper?: GridHelper;
+  private originHelper?: Group;
   private stockGroup?: Group;
   private resizeObserver?: ResizeObserver;
   private openCascade: OpenCascadeInstance | null = null;
@@ -215,11 +223,12 @@ export class ViewportComponent implements AfterViewInit {
         powerPreference: 'high-performance'
       });
       const scene = new Scene();
-      const perspectiveCamera = new PerspectiveCamera(45, 1, 0.01, 200);
+      const perspectiveCamera = new PerspectiveCamera(50, 1, 0.01, 200);
       const orthographicCamera = new OrthographicCamera(-1, 1, 1, -1, 0.01, 200);
       const controls = new OrbitControls(perspectiveCamera, canvas);
       const stockGroup = new Group();
       const gridHelper = this.createGridHelper(10);
+      const originHelper = this.createOriginHelper();
 
       scene.background = new Color('#eef3f8');
       scene.add(new AmbientLight('#ffffff', 1.75));
@@ -233,6 +242,7 @@ export class ViewportComponent implements AfterViewInit {
       scene.add(fillLight);
 
       scene.add(gridHelper);
+      scene.add(originHelper);
       scene.add(stockGroup);
 
       perspectiveCamera.position.set(2.6, 1.8, 2.4);
@@ -240,13 +250,10 @@ export class ViewportComponent implements AfterViewInit {
 
       controls.enablePan = true;
       controls.enableRotate = true;
-      controls.enableZoom = false;
-      controls.zoomToCursor = true;
+      controls.enableZoom = true;
       controls.zoomSpeed = 4;
-      controls.enableDamping = false;
-      controls.screenSpacePanning = true;
-      controls.dampingFactor = 0.08;
-      controls.target.set(0, 0, 0);
+      controls.zoomToCursor = true;
+      //controls.screenSpacePanning = true;
       controls.update();
 
       renderer.outputColorSpace = SRGBColorSpace;
@@ -259,6 +266,7 @@ export class ViewportComponent implements AfterViewInit {
       this.renderer = renderer;
       this.controls = controls;
       this.gridHelper = gridHelper;
+      this.originHelper = originHelper;
       this.stockGroup = stockGroup;
       this.resetFpsCounter('FPS: measuring…');
 
@@ -327,6 +335,15 @@ export class ViewportComponent implements AfterViewInit {
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
     return texture;
+  }
+
+  private createOriginHelper(): Group {
+    const originHelper = new Group();
+    originHelper.name = 'origin-helper';
+    const axesHelper = new AxesHelper(ORIGIN_AXES_SIZE);
+    axesHelper.name = 'origin-axes';
+    originHelper.add(axesHelper);
+    return originHelper;
   }
 
 
@@ -473,22 +490,7 @@ export class ViewportComponent implements AfterViewInit {
     while (this.stockGroup.children.length > 0) {
       const child = this.stockGroup.children[0];
       this.stockGroup.remove(child);
-
-      if (child instanceof Mesh) {
-        child.geometry.dispose();
-
-        if (Array.isArray(child.material)) {
-          child.material.forEach((material) => material.dispose());
-        } else {
-          child.material.dispose();
-        }
-
-        const labelTexture = child.userData['labelTexture'];
-
-        if (labelTexture instanceof CanvasTexture) {
-          labelTexture.dispose();
-        }
-      }
+      this.disposeSceneObject(child);
     }
   }
 
@@ -496,6 +498,10 @@ export class ViewportComponent implements AfterViewInit {
     this.animationFrameActive = false;
     this.resizeObserver?.disconnect();
     this.clearStockGroup();
+    if (this.originHelper) {
+      this.scene?.remove(this.originHelper);
+      this.disposeSceneObject(this.originHelper);
+    }
     if (this.gridHelper) {
       this.disposeGridHelper(this.gridHelper);
     }
@@ -508,6 +514,7 @@ export class ViewportComponent implements AfterViewInit {
     this.activeCamera = undefined;
     this.controls = undefined;
     this.gridHelper = undefined;
+    this.originHelper = undefined;
     this.stockGroup = undefined;
     this.resetFpsCounter('FPS: stopped');
   }
@@ -556,6 +563,30 @@ export class ViewportComponent implements AfterViewInit {
     gridHelper.material.dispose();
   }
 
+  private disposeSceneObject(object: Object3D): void {
+    object.traverse((child) => {
+      const texture = child.userData['labelTexture'];
+
+      if (texture instanceof CanvasTexture) {
+        texture.dispose();
+      }
+
+      const renderableChild = child as Object3D & {
+        geometry?: BufferGeometry;
+        material?: Material | Material[];
+      };
+
+      renderableChild.geometry?.dispose();
+
+      if (Array.isArray(renderableChild.material)) {
+        renderableChild.material.forEach((material) => material.dispose());
+        return;
+      }
+
+      renderableChild.material?.dispose();
+    });
+  }
+
   private applyControlsMode(): void {
     const camera = this.getActiveCamera();
 
@@ -586,8 +617,10 @@ export class ViewportComponent implements AfterViewInit {
     const contentBounds = new Box3().setFromObject(this.stockGroup);
 
     if (contentBounds.isEmpty()) {
+      const origin = new Vector3(0, 0, 0);
+      this.fitCameraProjection(camera, origin, 0.5);
       this.applyControlsMode();
-      this.controls.target.set(0, 0, 0);
+      this.controls.target.copy(origin);
       this.controls.update();
       return;
     }

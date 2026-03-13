@@ -63,5 +63,19 @@ describe('ViewportComponent', () => {
     expect(fixture.componentInstance.viewportStatus()).toContain('WebGL is unavailable');
     expect(fixture.componentInstance.fpsStatus()).toBe('FPS: unavailable without WebGL');
   });
+
+  it('should create an origin helper anchored at 0,0,0', () => {
+    const fixture = TestBed.createComponent(ViewportComponent);
+    const component = fixture.componentInstance as unknown as {
+      createOriginHelper: () => { position: { toArray: () => number[] }; getObjectByName: (name: string) => unknown };
+    };
+
+    const originHelper = component.createOriginHelper();
+
+    expect(originHelper.position.toArray()).toEqual([0, 0, 0]);
+    expect(originHelper.getObjectByName('origin-axes')).not.toBeNull();
+    expect(originHelper.getObjectByName('origin-marker')).not.toBeNull();
+    expect(originHelper.getObjectByName('origin-label')).not.toBeNull();
+  });
 });
 
