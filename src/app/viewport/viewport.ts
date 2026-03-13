@@ -38,6 +38,7 @@ import {
   WebGLRenderer
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import Stats from 'three/addons/libs/stats.module.js';
 import { Stock } from '../stocks/stock.model';
 import { StocksStore } from '../stocks/stocks.store';
 import { OpenCascadeInstance, OpenCascadeLoaderService } from './opencascade-loader.service';
@@ -67,8 +68,7 @@ const STATUS_PREFIX = '3D viewport';
 const COLOR_PALETTE = ['#2563eb', '#0f766e', '#9333ea', '#c2410c', '#be123c', '#047857'];
 const GRID_CELL_SIZE = 0.25;
 const GRID_PADDING = 0.5;
-const GRID_OFFSET = -0.001;
-const FPS_SAMPLE_INTERVAL_MS = 500;
+const GRID_OFFSET = 0;
 const ORIGIN_AXES_SIZE = 1;
 
 @Component({
@@ -86,7 +86,6 @@ export class ViewportComponent implements AfterViewInit {
 
   readonly viewportStatus = signal(`${STATUS_PREFIX}: preparing renderer…`);
   readonly openCascadeStatus = signal('OpenCascade: loading…');
-  readonly fpsStatus = signal('FPS: waiting for renderer…');
   readonly viewMode = signal<ViewMode>('3d');
   readonly projectionMode = signal<ProjectionMode>('perspective');
   readonly renderedStockCount = signal(0);
@@ -111,10 +110,10 @@ export class ViewportComponent implements AfterViewInit {
   private originHelper?: Group;
   private stockGroup?: Group;
   private resizeObserver?: ResizeObserver;
+  private stats?: Stats;
   private openCascade: OpenCascadeInstance | null = null;
   private orthographicHalfHeight = 1;
   private animationFrameActive = false;
-  private lastFpsSampleTime = 0;
   private framesSinceLastSample = 0;
 
   constructor() {
@@ -156,7 +155,6 @@ export class ViewportComponent implements AfterViewInit {
     if (!this.hasWebglSupport()) {
       this.viewportStatus.set(`${STATUS_PREFIX}: WebGL is unavailable in this environment.`);
       this.openCascadeStatus.set('OpenCascade: waiting for a browser WebGL context.');
-      this.fpsStatus.set('FPS: unavailable without WebGL');
       return;
     }
 
@@ -165,7 +163,6 @@ export class ViewportComponent implements AfterViewInit {
     if (!sceneReady) {
       this.viewportStatus.set(`${STATUS_PREFIX}: unable to initialise the renderer.`);
       this.openCascadeStatus.set('OpenCascade: renderer setup failed.');
-      this.fpsStatus.set('FPS: unavailable');
       return;
     }
 
@@ -268,8 +265,8 @@ export class ViewportComponent implements AfterViewInit {
       this.gridHelper = gridHelper;
       this.originHelper = originHelper;
       this.stockGroup = stockGroup;
-      this.resetFpsCounter('FPS: measuring…');
-
+      this.stats = new Stats();
+      document.body.appendChild(this.stats.dom);
       this.syncActiveCamera();
       this.handleResize(host.clientWidth, host.clientHeight);
       this.setupResizeObserver(host);
@@ -440,46 +437,14 @@ export class ViewportComponent implements AfterViewInit {
         return;
       }
 
+      if (!this.stats) {
+        return;
+      }
+
+      this.stats?.update();
       this.controls?.update();
       this.renderer?.render(this.scene!, camera);
-      this.updateFpsCounter(time);
     });
-  }
-
-  private resetFpsCounter(status: string): void {
-    this.lastFpsSampleTime = 0;
-    this.framesSinceLastSample = 0;
-    this.fpsStatus.set(status);
-  }
-
-  private updateFpsCounter(time?: number): void {
-    const timestamp = typeof time === 'number' ? time : this.getNow();
-
-    if (this.lastFpsSampleTime === 0) {
-      this.lastFpsSampleTime = timestamp;
-      this.framesSinceLastSample = 0;
-      return;
-    }
-
-    this.framesSinceLastSample += 1;
-    const elapsed = timestamp - this.lastFpsSampleTime;
-
-    if (elapsed < FPS_SAMPLE_INTERVAL_MS) {
-      return;
-    }
-
-    const framesPerSecond = (this.framesSinceLastSample * 1000) / elapsed;
-    this.fpsStatus.set(`FPS: ${Math.max(0, Math.round(framesPerSecond))}`);
-    this.lastFpsSampleTime = timestamp;
-    this.framesSinceLastSample = 0;
-  }
-
-  private getNow(): number {
-    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-      return performance.now();
-    }
-
-    return Date.now();
   }
 
   private clearStockGroup(): void {
@@ -516,7 +481,6 @@ export class ViewportComponent implements AfterViewInit {
     this.gridHelper = undefined;
     this.originHelper = undefined;
     this.stockGroup = undefined;
-    this.resetFpsCounter('FPS: stopped');
   }
 
   private getActiveCamera(): SupportedCamera | undefined {
