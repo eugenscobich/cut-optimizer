@@ -42,6 +42,7 @@ import Stats from 'three/addons/libs/stats.module.js';
 import { Stock } from '../stocks/stock.model';
 import { StocksStore } from '../stocks/stocks.store';
 import { OpenCascadeInstance, OpenCascadeLoaderService } from './opencascade-loader.service';
+import { OpenCascadeService } from './opencascade.service';
 
 interface StockViewportItem {
   readonly instanceId: string;
@@ -83,6 +84,7 @@ export class ViewportComponent implements AfterViewInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly stocksStore = inject(StocksStore);
   private readonly openCascadeLoader = inject(OpenCascadeLoaderService);
+  private readonly openCascadeService = inject(OpenCascadeService);
 
   readonly viewportStatus = signal(`${STATUS_PREFIX}: preparing renderer…`);
   readonly openCascadeStatus = signal('OpenCascade: loading…');
@@ -167,6 +169,13 @@ export class ViewportComponent implements AfterViewInit {
     }
 
     await this.initialiseOpenCascade();
+
+    if (this.openCascade) {
+      let box = this.openCascadeService.makeBottle(this.openCascade, 200, 200, 300);
+      console.log(box);
+    }
+
+
     this.rebuildStocks(this.renderedStocks());
     this.startRenderLoop();
   }
@@ -272,6 +281,7 @@ export class ViewportComponent implements AfterViewInit {
       this.setupResizeObserver(host);
       this.destroyRef.onDestroy(() => this.disposeScene());
       this.viewportStatus.set(`${STATUS_PREFIX}: ready.`);
+
 
       return true;
     } catch {

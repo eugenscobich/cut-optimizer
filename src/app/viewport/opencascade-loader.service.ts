@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 
 export interface OpenCascadeInstance {
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 interface OpenCascadeModule {
