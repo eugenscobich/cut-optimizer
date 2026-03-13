@@ -11,7 +11,7 @@ interface OpenCascadeModule {
 const OPEN_CASCADE_BASE_PATH = '/opencascade';
 
 @Injectable({ providedIn: 'root' })
-export class OpencascadeLoaderService {
+export class OpenCascadeLoaderService {
   private loadPromise?: Promise<OpenCascadeInstance | null>;
 
   load(): Promise<OpenCascadeInstance | null> {

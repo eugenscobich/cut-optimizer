@@ -20,6 +20,7 @@ describe('ViewportComponent', () => {
     expect(compiled.querySelector('canvas[aria-label="3D viewport"]')).not.toBeNull();
     expect(compiled.querySelector('[aria-label="Viewport mode"]')).not.toBeNull();
     expect(compiled.querySelector('[aria-label="Camera projection"]')).not.toBeNull();
+    expect(compiled.textContent).toContain('FPS:');
     expect(compiled.textContent).toContain('Drag to rotate');
   });
 
@@ -60,6 +61,7 @@ describe('ViewportComponent', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.viewportStatus()).toContain('WebGL is unavailable');
+    expect(fixture.componentInstance.fpsStatus()).toBe('FPS: unavailable without WebGL');
   });
 });
 

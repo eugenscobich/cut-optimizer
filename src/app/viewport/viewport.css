@@ -107,6 +107,11 @@ canvas:active {
   color: #0f766e;
 }
 
+.status-chip--metric {
+  color: #1d4ed8;
+  font-variant-numeric: tabular-nums;
+}
+
 .status-chip--hint {
   color: #475569;
   font-weight: 500;
